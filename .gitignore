@@ -1,0 +1,54 @@
+# Secrets & Environment
+config.json
+*.env
+*.env.*
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller builds
+DecartLiveController.spec
+
+# Media (ignore uploaded/generated video clips, but keep media_clips/ directory)
+media_clips/*.mp4
+media_clips/*.mov
+media_clips/*.webm
+media_clips/*.avi
+media_clips/*.mkv
+!media_clips/README.txt
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*.log
+*.docx

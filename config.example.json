@@ -1,0 +1,66 @@
+{
+  "DECART_API_KEY": "YOUR_DECART_API_KEY_HERE",
+  "default_tiktok_username": "his_lordshipp",
+  "default_prompt": "Cinematic lighting, high detail, masterpiece",
+  "command_duration_seconds": 15,
+  "default_off_mode": "webcam",
+  "server_host": "127.0.0.1",
+  "server_port": 8000,
+  "preset_prompts": [
+    {
+      "label": "Michael Jackson",
+      "prompt": "Michael Jackson in iconic red jacket, singing with live facial lip-sync, concert stage lighting, masterpiece"
+    },
+    {
+      "label": "Jay-Z in Tuxedo",
+      "prompt": "Jay-Z in sharp black tuxedo and black bow tie, studio lighting, hyper-realistic face swap, cinematic detail"
+    },
+    {
+      "label": "Smoking Nun",
+      "prompt": "Funny nun in traditional Catholic black and white habit, holding cigarette with rising wisps of smoke, comedy live stream"
+    },
+    {
+      "label": "Fire Dragon in Room",
+      "prompt": "Massive roaring mythical fire dragon appearing behind streamer in room, glowing orange scales, fiery embers, smoke, cinematic lighting"
+    },
+    {
+      "label": "Iron Man Armor",
+      "prompt": "Iron Man high-tech red and gold armor suit, glowing bright blue eyes, futuristic HUD reflections, metallic reflections"
+    },
+    {
+      "label": "Vascular Alien",
+      "prompt": "Alien creature with pitch black glossy eyes, hyper-vascular muscular bodybuilder physique, sci-fi eerie lighting"
+    },
+    {
+      "label": "Flying Mt. Fuji",
+      "prompt": "Flying through the sky over snow-capped Mount Fuji at supersonic speed, dynamic wind speed lines, cinematic superhero view"
+    },
+    {
+      "label": "Rick Ross",
+      "prompt": "Rick Ross with iconic groomed beard, dark black sunglasses, heavy layered gold diamond chains, luxury velvet jacket"
+    },
+    {
+      "label": "Giant Ostrich",
+      "prompt": "Surreal photorealistic funny giant ostrich head standing right next to streamer in room, comedy viral TikTok video"
+    },
+    {
+      "label": "Cyberpunk Neon Room",
+      "prompt": "Cyberpunk style room with neon lights, glowing holographic UI, futuristic aesthetic, cinematic lighting"
+    },
+    {
+      "label": "Explosion VFX",
+      "prompt": "Action movie explosion VFX, cinematic fireball blast, dynamic lighting, fiery sparks"
+    },
+    {
+      "label": "Anime Style",
+      "prompt": "Vibrant Japanese anime style, clean line art, studio Ghibli aesthetic, cel shaded"
+    }
+  ],
+  "gift_actions": {
+    "Rose": "Raining neon red roses, magical floral petals swirl, romantic cinematic lighting",
+    "Heart": "Floating glowing neon hearts, dreamy pastel aesthetic, sparkling light effects",
+    "Fire": "Massive roaring mythical fire dragon appearing behind streamer in room, breathing fiery embers, glowing warm scales",
+    "Cap": "Michael Jackson in iconic red jacket, singing with live facial lip-sync, concert stage lighting",
+    "Doughnut": "Funny nun in traditional Catholic black and white habit, holding cigarette with rising wisps of smoke"
+  }
+}

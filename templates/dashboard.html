@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decart AI Live-Stream Studio Controller</title>
+  <style>
+    :root {
+      --bg-dark: #0a0d14;
+      --card-bg: #121722;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --neon-cyan: #06b6d4;
+      --neon-pink: #ec4899;
+      --neon-green: #10b981;
+      --neon-amber: #f59e0b;
+      --neon-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 10% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 85%, rgba(236, 72, 153, 0.06) 0%, transparent 40%);
+    }
+
+    /* Top Navigation */
+    header {
+      background: rgba(18, 23, 34, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--neon-cyan));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(99, 102, 241, 0.5);
+      font-size: 18px;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-title span {
+      background: linear-gradient(135deg, #a78bfa, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Top AI Switch Pill */
+    .master-switch-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 999px;
+    }
+
+    .switch-label {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .switch-label.on {
+      color: var(--neon-green);
+    }
+    .switch-label.off {
+      color: var(--neon-amber);
+    }
+
+    /* Toggle switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      transition: .3s;
+      border-radius: 999px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--neon-green);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(22px);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #7c3aed, var(--accent));
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-success {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .btn-success:hover {
+      background: rgba(16, 185, 129, 0.3);
+    }
+
+    /* Main Container Grid */
+    main {
+      flex: 1;
+      padding: 28px 32px;
+      max-width: 1500px;
+      margin: 0 auto;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 1050px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      letter-spacing: -0.2px;
+    }
+
+    .card-title-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Active Status Hero Card */
+    .active-effect-card {
+      background: linear-gradient(135deg, rgba(24, 29, 44, 0.95), rgba(18, 23, 34, 0.95));
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .active-effect-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--accent), var(--neon-pink));
+    }
+
+    .active-prompt-display {
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.45;
+      color: #fff;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+
+    .badge-purple {
+      background: rgba(139, 92, 246, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(139, 92, 246, 0.35);
+    }
+
+    .badge-green {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .badge-amber {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    /* Live Prompt Input */
+    .prompt-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    textarea.prompt-input {
+      width: 100%;
+      height: 90px;
+      background: rgba(10, 14, 23, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 14px;
+      color: #fff;
+      font-size: 15px;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    textarea.prompt-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    }
+
+    .prompt-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Preset Grid */
+    .presets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 12px;
+    }
+
+    .preset-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .preset-card:hover {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .preset-card:active {
+      transform: translateY(0);
+    }
+
+    .preset-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .preset-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* TikTok Listener Section */
+    .tiktok-connect-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .input-text {
+      flex: 1;
+      background: rgba(10, 14, 23, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    .input-text:focus {
+      border-color: var(--accent);
+    }
+
+    .gift-rules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .gift-rule-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    /* Live Activity Feed */
+    .activity-feed {
+      height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(10, 14, 23, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .activity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border-left: 3px solid #64748b;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .activity-item.command {
+      border-left-color: var(--neon-cyan);
+      background: rgba(6, 182, 212, 0.06);
+    }
+
+    .activity-item.gift {
+      border-left-color: var(--neon-pink);
+      background: rgba(236, 72, 153, 0.06);
+    }
+
+    .activity-user {
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .activity-time {
+      font-size: 11px;
+      color: #64748b;
+      margin-left: auto;
+    }
+
+    /* Simulator Panel */
+    .simulator-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .btn-sim {
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-sim:hover {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* Settings Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-dialog {
+      background: #141926;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      width: 90%;
+      max-width: 580px;
+      padding: 28px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .form-group small {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Toast */
+    #toast-banner {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 200;
+      padding: 12px 20px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      font-size: 13px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #toast-banner.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Progress bar for 15s */
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .progress-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--accent), var(--neon-pink));
+      border-radius: 999px;
+      transition: width 1s linear;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-title">Decart AI <span>Live Controller</span></div>
+    </div>
+
+    <!-- AI Master Toggle -->
+    <div class="master-switch-container">
+      <span id="ai-status-text" class="switch-label on">AI Stream ON</span>
+      <label class="switch" title="Toggle AI WebRTC Stream to manage Decart API costs">
+        <input type="checkbox" id="ai-toggle-checkbox" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="nav-actions">
+      <span id="overlay-status-badge" class="badge badge-amber">● Overlay: Checking...</span>
+      <button id="toggle-preview-btn-nav" class="btn btn-secondary">
+        👁️ Preview Video
+      </button>
+      <button id="copy-overlay-btn" class="btn btn-secondary">
+        🔗 Copy OBS Overlay URL
+      </button>
+      <a href="/overlay" target="_blank" class="btn btn-secondary">
+        ↗ Open Overlay Tab
+      </a>
+      <button id="open-settings-btn" class="btn btn-secondary" title="Open Configuration Settings">
+        ⚙ Settings
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Grid Dashboard -->
+  <main>
+    <!-- Left Column: Stream Controls & Presets -->
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+
+      <!-- Overlay Warning Banner (shown when overlay not open) -->
+      <div id="overlay-warning-banner" style="display: flex; padding: 12px 18px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; font-size: 13px; color: #fbbf24; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px;">⚠️</span>
+          <span><strong>Stream Overlay is NOT open yet!</strong> To see your video effects, open <code>http://localhost:8000/overlay</code> in OBS Studio or click <strong>Preview Video</strong>.</span>
+        </div>
+        <button id="toggle-preview-btn-banner" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px; background: rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.5); color: #fff;">
+          👁️ Preview Here
+        </button>
+      </div>
+
+      <!-- In-Dashboard Video Preview Card -->
+      <div id="dashboard-preview-card" class="card" style="display: none; padding: 16px; background: #0c101b; border: 1px solid rgba(99, 102, 241, 0.35);">
+        <div class="card-title">
+          <div class="card-title-left">
+            <span>🎥 Live In-Dashboard Video Preview</span>
+            <span class="badge badge-purple">Overlay View</span>
+          </div>
+          <button id="close-preview-btn" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;">✕ Close Preview</button>
+        </div>
+        <div style="width: 100%; height: 380px; border-radius: 12px; overflow: hidden; background: #000; position: relative;">
+          <iframe id="preview-iframe" src="" allow="camera; microphone" style="width: 100%; height: 100%; border: none;"></iframe>
+        </div>
+      </div>
+
+      <!-- Active Prompt Hero Card -->
+      <div class="card active-effect-card">
+        <div class="card-title">
+          <div class="card-title-left">
+            <span>Current Stream Effect</span>
+            <span id="active-source-badge" class="badge badge-purple">Default</span>
+            <span id="active-user-badge" class="badge badge-amber" style="display: none;"></span>
+          </div>
+          <button id="quick-reset-btn" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">
+            ↺ Reset Default
+          </button>
+        </div>
+
+        <div id="active-prompt-text" class="active-prompt-display">
+          Cinematic lighting, high detail, masterpiece
+        </div>
+
+        <!-- 15s Countdown Progress Bar -->
+        <div id="active-timer-wrapper" style="display: none; flex-direction: column; gap: 4px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #38bdf8;">
+            <span>TikTok Viewer Trigger Active</span>
+            <span id="active-timer-label">15s</span>
+          </div>
+          <div class="progress-bar-container">
+            <div id="active-timer-bar" class="progress-bar-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Custom Prompt Pusher -->
+      <div class="card">
+        <div class="card-title">
+          <span>Push Instant AI Prompt</span>
+          <span style="font-size: 12px; color: var(--text-muted);">Instant WebRTC Update</span>
+        </div>
+        <div class="prompt-input-group">
+          <textarea id="custom-prompt-input" class="prompt-input" placeholder="Type any visual style, scene effect, or character transformation..."></textarea>
+          <div class="prompt-actions">
+            <span style="font-size: 12px; color: var(--text-muted);">Press <strong>Ctrl+Enter</strong> to push</span>
+            <div style="display: flex; gap: 8px;">
+              <button id="clear-prompt-btn" class="btn btn-secondary">Clear</button>
+              <button id="send-prompt-btn" class="btn btn-primary">⚡ Push to Stream</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- One-Click Preset Prompt Buttons -->
+      <div class="card">
+        <div class="card-title">
+          <span>One-Click Effect Presets</span>
+          <span style="font-size: 12px; color: var(--text-muted);">Click to apply immediately</span>
+        </div>
+        <div id="presets-container" class="presets-grid">
+          <!-- Populated dynamically from config.json -->
+        </div>
+      </div>
+
+      <!-- Viral Clip Deck (SSwurve Prank Mode) -->
+      <div class="card" style="border-color: rgba(236, 72, 153, 0.3); background: linear-gradient(135deg, rgba(24, 20, 36, 0.95), rgba(18, 23, 34, 0.95));">
+        <div class="card-title">
+          <div class="card-title-left">
+            <span>🎬 Viral Clip Deck (SSwurve Prank Mode)</span>
+            <span class="badge" style="background: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.4);">Pre-Rendered Photoreal Clips</span>
+          </div>
+          <button id="refresh-clips-btn" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;">↺ Refresh Clips</button>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+          Drop any high-resolution AI video clips (.mp4) in the <code style="color: #38bdf8;">media_clips/</code> folder. Click to play them seamlessly over your stream or use <strong>Shift + 1-9</strong> hotkeys!
+        </p>
+        <div id="clips-container" style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <!-- Populated dynamically from /api/clips -->
+        </div>
+      </div>
+
+      <!-- Quick OBS Integration Helper -->
+      <div class="card" style="background: rgba(15, 23, 42, 0.4);">
+        <div class="card-title">
+          <span>OBS Studio Browser Source Setup</span>
+        </div>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+          Add a new <strong>Browser Source</strong> in OBS with URL: <code id="obs-url-display" style="color: #38bdf8; background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px;">http://localhost:8000/overlay</code>. Set Width to <strong>1280</strong> and Height to <strong>720</strong>.
+          When AI is toggled OFF, it transitions to raw webcam or clean transparent screen according to your config.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Right Column: TikTok Live Listener & Testing Suite -->
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+
+      <!-- TikTok Connection Card -->
+      <div class="card">
+        <div class="card-title">
+          <div class="card-title-left">
+            <span>TikTok Live Stream</span>
+            <span id="tiktok-badge" class="badge badge-amber">● Disconnected</span>
+          </div>
+          <span id="tiktok-room-info" style="font-size: 11px; color: var(--text-muted);"></span>
+        </div>
+
+        <div class="tiktok-connect-bar">
+          <input type="text" id="tiktok-username-input" class="input-text" placeholder="TikTok username (without @)">
+          <button id="tiktok-connect-btn" class="btn btn-primary">Connect</button>
+          <button id="tiktok-disconnect-btn" class="btn btn-danger" style="display: none;">Disconnect</button>
+        </div>
+
+        <div id="tiktok-error-banner" style="display: none; padding: 10px 14px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; font-size: 12px; color: #fca5a5;">
+        </div>
+
+        <!-- Mapped Trigger Info -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-size: 12px; font-weight: 700; color: #cbd5e1; text-transform: uppercase;">
+            Live Triggers (15s Duration)
+          </span>
+          <div style="font-size: 12px; color: var(--text-muted);">
+            💬 Chat Command: <code style="color: var(--neon-cyan);">!ai &lt;any prompt&gt;</code>
+          </div>
+          <div id="gift-rules-container" class="gift-rules-grid">
+            <!-- Populated from config -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Event Simulator (No Live TikTok required) -->
+      <div class="card">
+        <div class="card-title">
+          <span>🧪 Test Event Simulator</span>
+          <span style="font-size: 11px; color: var(--text-muted);">Test without live stream</span>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+          Simulate TikTok live events instantly to verify your overlay animations and 15s reset timers:
+        </div>
+        <div class="simulator-buttons">
+          <button class="btn-sim" onclick="simulateTest('comment', 'Cyberpunk Neon Warrior')">
+            💬 !ai Cyberpunk Warrior
+          </button>
+          <button class="btn-sim" onclick="simulateTest('comment', 'Explosion VFX action hero')">
+            💬 !ai Explosion VFX
+          </button>
+          <button class="btn-sim" onclick="simulateTest('gift', null, 'Rose')">
+            🌹 Rose Gift
+          </button>
+          <button class="btn-sim" onclick="simulateTest('gift', null, 'Fire')">
+            🔥 Fire Gift
+          </button>
+          <button class="btn-sim" onclick="simulateTest('gift', null, 'Heart')">
+            ❤️ Heart Gift
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Activity & Chat Feed -->
+      <div class="card">
+        <div class="card-title">
+          <span>Live Stream Activity Log</span>
+          <button id="clear-feed-btn" class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;">Clear</button>
+        </div>
+        <div id="activity-feed" class="activity-feed">
+          <div class="activity-item" style="border-left-color: #475569;">
+            <span>System ready. Monitoring WebSocket and TikTok events...</span>
+            <span class="activity-time">Now</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Settings Modal Dialog -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">Stream & Decart Configuration</div>
+        <button id="close-settings-btn" class="close-btn">&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label>Decart API Key</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="password" id="cfg-api-key" class="input-text" placeholder="Enter Decart API key (dct_...)">
+          <button id="test-token-btn" class="btn btn-secondary">Verify Key</button>
+        </div>
+        <small id="key-status-text">Saved in config.json. Client tokens are safely minted via /api/token.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Default Stream Prompt (Base Visual Effect)</label>
+        <input type="text" id="cfg-default-prompt" class="input-text">
+        <small>The prompt reverted to when the 15-second command/gift timer expires.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Default TikTok Username</label>
+        <input type="text" id="cfg-tiktok-username" class="input-text">
+      </div>
+
+      <div class="form-group">
+        <label>TikTok Command Effect Duration (seconds)</label>
+        <input type="number" id="cfg-duration" class="input-text" min="5" max="120" value="15">
+      </div>
+
+      <div class="form-group">
+        <label>AI OFF Display Mode</label>
+        <select id="cfg-off-mode" class="input-text">
+          <option value="webcam">Raw Webcam (Shows camera when AI stream is OFF)</option>
+          <option value="transparent">Transparent Screen (Allows OBS background camera pass-through)</option>
+        </select>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button id="cancel-settings-btn" class="btn btn-secondary">Cancel</button>
+        <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-banner">Message</div>
+
+  <!-- Dashboard Client Logic -->
+  <script>
+    let ws = null;
+    let currentConfig = {};
+    let isAIActive = true;
+
+    // Elements
+    const aiToggleCheckbox = document.getElementById("ai-toggle-checkbox");
+    const aiStatusText = document.getElementById("ai-status-text");
+    const activePromptText = document.getElementById("active-prompt-text");
+    const activeSourceBadge = document.getElementById("active-source-badge");
+    const activeUserBadge = document.getElementById("active-user-badge");
+    const activeTimerWrapper = document.getElementById("active-timer-wrapper");
+    const activeTimerLabel = document.getElementById("active-timer-label");
+    const activeTimerBar = document.getElementById("active-timer-bar");
+
+    const customPromptInput = document.getElementById("custom-prompt-input");
+    const sendPromptBtn = document.getElementById("send-prompt-btn");
+    const clearPromptBtn = document.getElementById("clear-prompt-btn");
+    const quickResetBtn = document.getElementById("quick-reset-btn");
+    const presetsContainer = document.getElementById("presets-container");
+
+    const tiktokUsernameInput = document.getElementById("tiktok-username-input");
+    const tiktokConnectBtn = document.getElementById("tiktok-connect-btn");
+    const tiktokDisconnectBtn = document.getElementById("tiktok-disconnect-btn");
+    const tiktokBadge = document.getElementById("tiktok-badge");
+    const tiktokRoomInfo = document.getElementById("tiktok-room-info");
+    const tiktokErrorBanner = document.getElementById("tiktok-error-banner");
+    const giftRulesContainer = document.getElementById("gift-rules-container");
+    const activityFeed = document.getElementById("activity-feed");
+
+    const copyOverlayBtn = document.getElementById("copy-overlay-btn");
+    const obsUrlDisplay = document.getElementById("obs-url-display");
+    const toastBanner = document.getElementById("toast-banner");
+
+    // Overlay Preview and Status Elements
+    const overlayStatusBadge = document.getElementById("overlay-status-badge");
+    const overlayWarningBanner = document.getElementById("overlay-warning-banner");
+    const dashboardPreviewCard = document.getElementById("dashboard-preview-card");
+    const previewIframe = document.getElementById("preview-iframe");
+    const togglePreviewBtnNav = document.getElementById("toggle-preview-btn-nav");
+    const togglePreviewBtnBanner = document.getElementById("toggle-preview-btn-banner");
+    const closePreviewBtn = document.getElementById("close-preview-btn");
+
+    const settingsModal = document.getElementById("settings-modal");
+    const openSettingsBtn = document.getElementById("open-settings-btn");
+    const closeSettingsBtn = document.getElementById("close-settings-btn");
+    const cancelSettingsBtn = document.getElementById("cancel-settings-btn");
+    const saveSettingsBtn = document.getElementById("save-settings-btn");
+    const testTokenBtn = document.getElementById("test-token-btn");
+
+    const cfgApiKey = document.getElementById("cfg-api-key");
+    const cfgDefaultPrompt = document.getElementById("cfg-default-prompt");
+    const cfgTiktokUsername = document.getElementById("cfg-tiktok-username");
+    const cfgDuration = document.getElementById("cfg-duration");
+    const cfgOffMode = document.getElementById("cfg-off-mode");
+    const keyStatusText = document.getElementById("key-status-text");
+
+    // Initialize full overlay URL display
+    const overlayFullUrl = `${window.location.origin}/overlay`;
+    obsUrlDisplay.textContent = overlayFullUrl;
+
+    function showToast(msg, duration = 3500) {
+      toastBanner.textContent = msg;
+      toastBanner.classList.add("show");
+      setTimeout(() => toastBanner.classList.remove("show"), duration);
+    }
+
+    // =========================================================================
+    // WebSocket Setup
+    // =========================================================================
+    function connectWebSocket() {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/ws?client=dashboard`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        showToast("Connected to Live Controller");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleWebSocketMessage(data);
+        } catch (e) {
+          console.error("WS error:", e);
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWebSocket, 2000);
+      };
+    }
+
+    function handleWebSocketMessage(data) {
+      switch (data.type) {
+        case "status_sync":
+          isAIActive = data.ai_enabled;
+          aiToggleCheckbox.checked = isAIActive;
+          updateAIToggleUI(isAIActive);
+          updatePromptDisplay(data.current_prompt, data.source, data.user);
+          updateTimerUI(data.timer_seconds_left, data.timer_duration);
+          if (data.connected_clients) {
+            updateOverlayStatus(data.connected_clients.overlay || 0);
+          }
+          if (data.tiktok) {
+            updateTikTokStatus(data.tiktok.status, data.tiktok.username, data.tiktok.error, data.tiktok.room_id);
+          }
+          break;
+
+        case "set_prompt":
+          updatePromptDisplay(data.prompt, data.source, data.user);
+          break;
+
+        case "toggle_ai":
+          isAIActive = data.enabled;
+          aiToggleCheckbox.checked = isAIActive;
+          updateAIToggleUI(isAIActive);
+          break;
+
+        case "timer_tick":
+          updateTimerUI(data.seconds_left, data.duration);
+          break;
+
+        case "tiktok_status":
+          updateTikTokStatus(data.status, data.username, data.error, data.room_id);
+          break;
+
+        case "tiktok_chat":
+          logActivity(
+            data.is_command ? "command" : "chat",
+            data.user,
+            data.comment,
+            data.is_command ? "💬 !ai Command" : "💬 Chat"
+          );
+          break;
+
+        case "tiktok_gift":
+          logActivity(
+            "gift",
+            data.user,
+            `${data.repeat_count}x ${data.gift_name} (${data.diamond_count} 💎) → ${data.triggered_prompt || "No effect"}`,
+            "🎁 Gift"
+          );
+          break;
+      }
+    }
+
+    function updateAIToggleUI(enabled) {
+      if (enabled) {
+        aiStatusText.textContent = "AI Stream ON";
+        aiStatusText.className = "switch-label on";
+      } else {
+        aiStatusText.textContent = "AI Stream OFF (Saved)";
+        aiStatusText.className = "switch-label off";
+      }
+    }
+
+    function updatePromptDisplay(prompt, source, user) {
+      activePromptText.textContent = prompt;
+      let sourceName = "Default";
+      if (source === "dashboard") sourceName = "Manual Pusher";
+      else if (source === "preset") sourceName = "Preset";
+      else if (source === "tiktok_comment") sourceName = "TikTok !ai Command";
+      else if (source === "tiktok_gift") sourceName = "TikTok Gift Trigger";
+      else if (source === "default_reset") sourceName = "Reset (Timer Expired)";
+
+      activeSourceBadge.textContent = sourceName;
+      if (user) {
+        activeUserBadge.style.display = "inline-flex";
+        activeUserBadge.textContent = user;
+      } else {
+        activeUserBadge.style.display = "none";
+      }
+    }
+
+    function updateTimerUI(secondsLeft, totalDuration) {
+      if (secondsLeft > 0 && totalDuration > 0) {
+        activeTimerWrapper.style.display = "flex";
+        activeTimerLabel.textContent = `${secondsLeft}s remaining`;
+        const percentage = Math.max(0, Math.min(100, (secondsLeft / totalDuration) * 100));
+        activeTimerBar.style.width = `${percentage}%`;
+      } else {
+        activeTimerWrapper.style.display = "none";
+        activeTimerBar.style.width = "0%";
+      }
+    }
+
+    function updateTikTokStatus(status, username, error, roomId) {
+      tiktokBadge.className = "badge";
+      if (status === "connected") {
+        tiktokBadge.classList.add("badge-green");
+        tiktokBadge.textContent = `● Live: @${username}`;
+        tiktokConnectBtn.style.display = "none";
+        tiktokDisconnectBtn.style.display = "inline-flex";
+        tiktokErrorBanner.style.display = "none";
+        tiktokRoomInfo.textContent = roomId ? `Room ID: ${roomId}` : "";
+      } else if (status === "connecting") {
+        tiktokBadge.classList.add("badge-amber");
+        tiktokBadge.textContent = `⏳ Connecting @${username}...`;
+        tiktokConnectBtn.style.display = "inline-flex";
+        tiktokDisconnectBtn.style.display = "none";
+        tiktokErrorBanner.style.display = "none";
+      } else {
+        tiktokBadge.classList.add("badge-amber");
+        tiktokBadge.textContent = `● Disconnected`;
+        tiktokConnectBtn.style.display = "inline-flex";
+        tiktokDisconnectBtn.style.display = "none";
+        tiktokRoomInfo.textContent = "";
+
+        if (error) {
+          tiktokErrorBanner.textContent = error;
+          tiktokErrorBanner.style.display = "block";
+        } else {
+          tiktokErrorBanner.style.display = "none";
+        }
+      }
+    }
+
+    function logActivity(type, user, text, label) {
+      const item = document.createElement("div");
+      item.className = `activity-item ${type}`;
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      item.innerHTML = `
+        <div>
+          <span style="font-weight: 700; color: #a78bfa;">[${label}]</span>
+          <span class="activity-user">@${user}</span>:
+          <span>${escapeHtml(text)}</span>
+        </div>
+        <span class="activity-time">${now}</span>
+      `;
+
+      activityFeed.insertBefore(item, activityFeed.firstChild);
+      // Limit to 60 items
+      if (activityFeed.children.length > 60) {
+        activityFeed.removeChild(activityFeed.lastChild);
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return str.replace(/[&<>"']/g, function(m) {
+        return ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        })[m];
+      });
+    }
+
+    // =========================================================================
+    // User Actions
+    // =========================================================================
+
+    // AI Stream Toggle
+    aiToggleCheckbox.addEventListener("change", () => {
+      const enabled = aiToggleCheckbox.checked;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "toggle_ai", enabled }));
+      }
+      showToast(enabled ? "AI Stream Enabled" : "AI Stream Paused (Saving API costs)");
+    });
+
+    function updateOverlayStatus(overlayCount) {
+      if (overlayCount > 0) {
+        overlayStatusBadge.textContent = `● Overlay Active (${overlayCount})`;
+        overlayStatusBadge.className = "badge badge-green";
+        overlayWarningBanner.style.display = "none";
+      } else {
+        overlayStatusBadge.textContent = "● Overlay Offline";
+        overlayStatusBadge.className = "badge badge-amber";
+        overlayWarningBanner.style.display = "flex";
+      }
+    }
+
+    function toggleDashboardPreview(show) {
+      const isVisible = dashboardPreviewCard.style.display === "flex";
+      const shouldShow = typeof show === "boolean" ? show : !isVisible;
+      if (shouldShow) {
+        dashboardPreviewCard.style.display = "flex";
+        if (!previewIframe.src || previewIframe.src === "about:blank") {
+          previewIframe.src = "/overlay?hud=1";
+        }
+        showToast("Opening in-dashboard preview...");
+      } else {
+        dashboardPreviewCard.style.display = "none";
+        previewIframe.src = "about:blank";
+      }
+    }
+
+    togglePreviewBtnNav.addEventListener("click", () => toggleDashboardPreview());
+    togglePreviewBtnBanner.addEventListener("click", () => toggleDashboardPreview(true));
+    closePreviewBtn.addEventListener("click", () => toggleDashboardPreview(false));
+
+    // Send Custom Prompt
+    function sendCustomPrompt() {
+      let prompt = customPromptInput.value.trim();
+      if (!prompt) return;
+      if (prompt.toLowerCase().startsWith("!ai ")) {
+        prompt = prompt.substring(4).trim();
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "set_prompt",
+          prompt,
+          source: "dashboard",
+          user: null,
+          duration: null
+        }));
+      }
+      showToast("🚀 Prompt pushed to stream!");
+    }
+
+    sendPromptBtn.addEventListener("click", sendCustomPrompt);
+    customPromptInput.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        sendCustomPrompt();
+      }
+    });
+
+    clearPromptBtn.addEventListener("click", () => {
+      customPromptInput.value = "";
+    });
+
+    quickResetBtn.addEventListener("click", () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "reset_default" }));
+      }
+      showToast("↺ Reset to default stream effect");
+    });
+
+    // Presets Click Handler
+    function selectPreset(preset) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "set_prompt",
+          prompt: preset.prompt,
+          source: "preset",
+          user: preset.label,
+          duration: null
+        }));
+      }
+      showToast(`Applied preset: ${preset.label}`);
+    }
+
+    // TikTok Connect / Disconnect
+    tiktokConnectBtn.addEventListener("click", () => {
+      const username = tiktokUsernameInput.value.trim().replace(/^@/, "");
+      if (!username) {
+        showToast("Please enter a TikTok username");
+        return;
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "tiktok_connect", username }));
+      }
+    });
+
+    tiktokDisconnectBtn.addEventListener("click", () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "tiktok_disconnect" }));
+      }
+    });
+
+    // Copy OBS URL
+    copyOverlayBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(overlayFullUrl).then(() => {
+        showToast("Copied overlay URL to clipboard!");
+      }).catch(() => {
+        showToast("Overlay URL: " + overlayFullUrl);
+      });
+    });
+
+    document.getElementById("clear-feed-btn").addEventListener("click", () => {
+      activityFeed.innerHTML = "";
+    });
+
+    // =========================================================================
+    // Simulator
+    // =========================================================================
+    window.simulateTest = function(simType, prompt, giftName) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "simulate_event",
+          sim_type: simType,
+          user: "TikTokTester",
+          prompt: prompt,
+          gift_name: giftName
+        }));
+      }
+      showToast(`Simulated: ${simType === 'comment' ? prompt : giftName}`);
+    };
+
+    // =========================================================================
+    // Config & Settings
+    // =========================================================================
+    async function loadConfig() {
+      try {
+        const res = await fetch("/api/config");
+        currentConfig = await res.json();
+        
+        tiktokUsernameInput.value = currentConfig.default_tiktok_username || "tiktok";
+        cfgTiktokUsername.value = currentConfig.default_tiktok_username || "tiktok";
+        cfgDefaultPrompt.value = currentConfig.default_prompt || "";
+        cfgDuration.value = currentConfig.command_duration_seconds || 15;
+        cfgOffMode.value = currentConfig.default_off_mode || "webcam";
+
+        if (currentConfig.is_key_configured) {
+          keyStatusText.textContent = `Configured: ${currentConfig.DECART_API_KEY_MASKED}`;
+          keyStatusText.style.color = "#34d399";
+        } else {
+          keyStatusText.textContent = "Not configured. Enter key below.";
+          keyStatusText.style.color = "#f87171";
+        }
+
+        renderPresets(currentConfig.preset_prompts || []);
+        renderGiftRules(currentConfig.gift_actions || {});
+      } catch (e) {
+        console.error("Config fetch error:", e);
+      }
+    }
+
+    function renderPresets(presets) {
+      presetsContainer.innerHTML = "";
+      presets.forEach((p, index) => {
+        const card = document.createElement("div");
+        card.className = "preset-card";
+        const keyTag = index < 9 ? `<span style="font-size: 11px; background: rgba(99, 102, 241, 0.25); color: #c084fc; padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(99, 102, 241, 0.35); font-weight: 700;">[${index + 1}]</span>` : "";
+        card.innerHTML = `
+          <div class="preset-name" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span>✦</span> ${escapeHtml(p.label)}
+            </div>
+            ${keyTag}
+          </div>
+          <div class="preset-desc">${escapeHtml(p.prompt)}</div>
+        `;
+        card.addEventListener("click", () => selectPreset(p));
+        presetsContainer.appendChild(card);
+      });
+    }
+
+    // Viral Clips handling
+    let loadedClips = [];
+    const clipsContainer = document.getElementById("clips-container");
+    const refreshClipsBtn = document.getElementById("refresh-clips-btn");
+
+    async function loadClips() {
+      if (!clipsContainer) return;
+      try {
+        const res = await fetch("/api/clips");
+        const data = await res.json();
+        loadedClips = data.clips || [];
+        renderClips(loadedClips);
+      } catch (e) {
+        console.error("Error loading clips:", e);
+      }
+    }
+
+    function renderClips(clips) {
+      if (!clipsContainer) return;
+      clipsContainer.innerHTML = "";
+      if (clips.length === 0) {
+        clipsContainer.innerHTML = `
+          <div style="font-size: 12px; color: var(--text-muted); padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 6px; width: 100%;">
+            No .mp4 clips found in <code style="color: #38bdf8;">media_clips/</code> folder. Place your generated Kling / Runway / Luma AI clips there to see them appear here.
+          </div>
+        `;
+        return;
+      }
+
+      clips.forEach((clip, index) => {
+        const card = document.createElement("button");
+        card.className = "btn btn-secondary";
+        card.style.cssText = "display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 12px; background: rgba(236, 72, 153, 0.12); border-color: rgba(236, 72, 153, 0.3); color: #f472b6; border-radius: 8px; cursor: pointer; transition: all 0.2s;";
+        const keyTag = index < 9 ? `<span style="font-size: 10px; background: rgba(236, 72, 153, 0.3); color: #fff; padding: 1px 5px; border-radius: 3px; font-weight: 700;">Shift+${index + 1}</span>` : "";
+        card.innerHTML = `<span>🎬 ${escapeHtml(clip.name)}</span> ${keyTag}`;
+        card.addEventListener("click", () => triggerClip(clip.filename));
+        clipsContainer.appendChild(card);
+      });
+    }
+
+    function triggerClip(filename) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "play_clip",
+          clip: filename,
+          user: "Streamer"
+        }));
+      } else {
+        fetch("/api/play_clip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clip: filename, user: "Streamer" })
+        });
+      }
+      showToast(`🎬 Triggered clip: ${filename}`);
+    }
+
+    if (refreshClipsBtn) {
+      refreshClipsBtn.addEventListener("click", () => {
+        loadClips();
+        showToast("Refreshed clips from media_clips/");
+      });
+    }
+
+    // Number hotkeys [1-9] for rapid live character switching and Shift+[1-9] for clips
+    window.addEventListener("keydown", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      const keyNum = parseInt(e.key);
+      if (!isNaN(keyNum) && keyNum >= 1 && keyNum <= 9) {
+        if (e.shiftKey) {
+          if (loadedClips && loadedClips.length >= keyNum) {
+            triggerClip(loadedClips[keyNum - 1].filename);
+          }
+        } else {
+          if (currentConfig.preset_prompts && currentConfig.preset_prompts.length >= keyNum) {
+            selectPreset(currentConfig.preset_prompts[keyNum - 1]);
+          }
+        }
+      }
+    });
+
+    function renderGiftRules(giftActions) {
+      giftRulesContainer.innerHTML = "";
+      for (const [gift, prompt] of Object.entries(giftActions)) {
+        const item = document.createElement("div");
+        item.className = "gift-rule-item";
+        item.innerHTML = `
+          <span style="font-weight: 700; color: #f43f5e;">🎁 ${escapeHtml(gift)}</span>
+          <span style="color: var(--text-muted); font-size: 11px;">→ 15s Effect</span>
+        `;
+        item.title = prompt;
+        giftRulesContainer.appendChild(item);
+      }
+    }
+
+    openSettingsBtn.addEventListener("click", () => {
+      settingsModal.classList.add("open");
+    });
+
+    function closeSettings() {
+      settingsModal.classList.remove("open");
+    }
+
+    closeSettingsBtn.addEventListener("click", closeSettings);
+    cancelSettingsBtn.addEventListener("click", closeSettings);
+
+    saveSettingsBtn.addEventListener("click", async () => {
+      const payload = {
+        default_tiktok_username: cfgTiktokUsername.value.trim(),
+        default_prompt: cfgDefaultPrompt.value.trim(),
+        command_duration_seconds: parseInt(cfgDuration.value) || 15,
+        default_off_mode: cfgOffMode.value
+      };
+
+      if (cfgApiKey.value.trim()) {
+        payload.DECART_API_KEY = cfgApiKey.value.trim();
+      }
+
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          showToast("Settings saved successfully!");
+          closeSettings();
+          loadConfig();
+        } else {
+          showToast("Failed to save settings");
+        }
+      } catch (e) {
+        showToast("Error saving: " + e.message);
+      }
+    });
+
+    testTokenBtn.addEventListener("click", async () => {
+      testTokenBtn.textContent = "Testing...";
+      try {
+        const res = await fetch("/api/token", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.apiKey) {
+          showToast("✓ Decart API Key verified! Token minted successfully.");
+        } else {
+          showToast("✕ Key verification failed: " + (data.error || "Unknown"));
+        }
+      } catch (e) {
+        showToast("Error: " + e.message);
+      } finally {
+        testTokenBtn.textContent = "Verify Key";
+      }
+    });
+
+    // Initial load
+    window.addEventListener("DOMContentLoaded", () => {
+      connectWebSocket();
+      loadConfig();
+      loadClips();
+    });
+  </script>
+</body>
+</html>
