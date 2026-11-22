@@ -1,63 +1,55 @@
-import os
-import sys
-import json
+"""
+TikTok Live Viral AI Stream Controller - SSwurve Edition
+==========================================================
+Streamline viral clip playback, TikTok Live gift/chat triggers,
+and camera overlays for TikTok LIVE Studio and OBS Studio.
+"""
+
 import asyncio
+import json
 import logging
-import webbrowser
+import os
+import shutil
+import sys
 import threading
 import time
-from typing import Dict, Any, Optional, Set
+import webbrowser
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional, Set
 
-import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 import uvicorn
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-# TikTokLive imports
+# TikTokLive import
 try:
     from TikTokLive import TikTokLiveClient
-    from TikTokLive.events import (
-        ConnectEvent,
-        CommentEvent,
-        GiftEvent,
-        DisconnectEvent,
-        LiveEndEvent
-    )
-    from TikTokLive.client.errors import TikTokLiveError, UserOfflineError
+    from TikTokLive.events import ConnectEvent, DisconnectEvent, CommentEvent, GiftEvent
     TIKTOK_AVAILABLE = True
 except ImportError:
     TIKTOK_AVAILABLE = False
-    print("Warning: TikTokLive library not installed or failed to import.")
 
-# Configure logging
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
-logger = logging.getLogger("DecartController")
+logger = logging.getLogger("LiveController")
 
 # ==============================================================================
-# Helper functions for PyInstaller paths and config loading
+# Path & Configuration Management
 # ==============================================================================
 
 def get_base_dir() -> str:
-    """
-    Get the directory where config.json and user-editable files live.
-    When packaged with PyInstaller, this is the directory containing the executable.
-    When running as a script, this is the directory containing main.py.
-    """
+    """Get the base execution directory (supports PyInstaller frozen binary)."""
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_templates_dir() -> str:
-    """
-    Get the directory containing HTML templates.
-    Handles PyInstaller temp extraction directory (_MEIPASS) and source directory.
-    """
+    """Find templates directory in PyInstaller _MEIPASS or local directory."""
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass and os.path.exists(os.path.join(meipass, "templates")):
@@ -76,68 +68,34 @@ def get_media_dir() -> str:
     return media_dir
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "DECART_API_KEY": "YOUR_DECART_API_KEY_HERE",
-    "default_tiktok_username": "tiktok",
-    "default_prompt": "Cinematic lighting, high detail, masterpiece",
-    "command_duration_seconds": 15,
-    "default_off_mode": "webcam",  # 'webcam' or 'transparent'
+    "default_tiktok_username": "his_lordshipp",
+    "active_theme": "obsidian_neon",
+    "overlay_audio": True,
+    "overlay_volume": 1.0,
+    "show_hud_on_clip": True,
     "server_host": "127.0.0.1",
     "server_port": 8000,
-    "preset_prompts": [
-        {
-            "label": "Cyberpunk Room",
-            "prompt": "Cyberpunk style room with neon lights, glowing holographic UI, high tech futuristic aesthetic, cinematic lighting"
-        },
-        {
-            "label": "Explosion VFX",
-            "prompt": "Action movie explosion VFX, cinematic fireball blast, intense dynamic lighting, smoke, fiery sparks"
-        },
-        {
-            "label": "Anime Style",
-            "prompt": "Vibrant Japanese anime style, clean line art, studio Ghibli aesthetic, colorful animation, cel shaded"
-        },
-        {
-            "label": "Retro 80s Synthwave",
-            "prompt": "1980s retro synthwave, neon grid horizon, VHS glitch effect, magenta and cyan glow, outrun aesthetic"
-        },
-        {
-            "label": "Zombie Apocalypse",
-            "prompt": "Dark apocalyptic horror thriller, gritty ruined wasteland background, dramatic cinematic shadows, eerie atmosphere"
-        },
-        {
-            "label": "Underwater Atlantis",
-            "prompt": "Mythical underwater kingdom of Atlantis, swimming bioluminescent marine life, shimmering sunbeams underwater"
-        }
-    ],
-    "gift_actions": {
-        "Rose": "Raining neon red roses, magical floral petals swirl, romantic cinematic lighting",
-        "Heart": "Floating glowing neon hearts, dreamy pastel aesthetic, sparkling light effects",
-        "Fire": "Cinematic raging fire flames vortex, glowing embers around, intense warm lighting",
-        "Cap": "Golden crown with sparkling jewels, royal golden aura, dramatic stage lighting",
-        "Doughnut": "Floating giant cartoon doughnuts, rainbow sprinkle rain, playful colorful wonderland"
-    }
+    "gift_mappings": {}
 }
 
 def load_config() -> Dict[str, Any]:
-    """Load config.json relative to sys.executable (for PyInstaller) or create default."""
+    """Load config.json or initialize from config.example.json / default."""
     config_file = get_config_path()
     if not os.path.exists(config_file):
         example_path = os.path.join(get_base_dir(), "config.example.json")
         if os.path.exists(example_path):
             try:
                 with open(example_path, "r", encoding="utf-8") as f:
-                    example_cfg = json.load(f)
-                save_config(example_cfg)
-                return example_cfg
+                    cfg = json.load(f)
+                save_config(cfg)
+                return cfg
             except Exception as e:
                 logger.warning(f"Failed to copy from config.example.json: {e}")
-        logger.info(f"Creating default config file at: {config_file}")
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
     try:
         with open(config_file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-            # Merge with defaults for missing keys
             for k, v in DEFAULT_CONFIG.items():
                 if k not in cfg:
                     cfg[k] = v
@@ -147,7 +105,7 @@ def load_config() -> Dict[str, Any]:
         return DEFAULT_CONFIG.copy()
 
 def save_config(cfg: Dict[str, Any]) -> bool:
-    """Save configuration to config.json relative to sys.executable."""
+    """Save configuration to config.json."""
     config_file = get_config_path()
     try:
         with open(config_file, "w", encoding="utf-8") as f:
@@ -163,44 +121,33 @@ def save_config(cfg: Dict[str, Any]) -> bool:
 
 class LiveStreamManager:
     def __init__(self):
-        config = load_config()
-        self.ai_enabled: bool = True
-        self.default_prompt: str = config.get("default_prompt", "Cinematic lighting, high detail, masterpiece")
-        self.current_prompt: str = self.default_prompt
-        self.current_source: str = "default"  # 'default', 'dashboard', 'preset', 'tiktok_comment', 'tiktok_gift'
-        self.active_user: Optional[str] = None
-        self.active_detail: Optional[str] = None
-        
-        # Timer management for 15s auto-reset
-        self.timer_seconds_left: int = 0
-        self.timer_duration: int = 15
-        self.reset_task: Optional[asyncio.Task] = None
+        cfg = load_config()
+        self.active_clip: Optional[Dict[str, Any]] = None
+        self.gift_mappings: Dict[str, str] = cfg.get("gift_mappings", {})
+        self.active_theme: str = cfg.get("active_theme", "obsidian_neon")
+        self.feed_enabled: bool = True
 
         # TikTok Live state
         self.tiktok_client: Optional[Any] = None
         self.tiktok_task: Optional[asyncio.Task] = None
-        self.tiktok_status: str = "disconnected"  # 'disconnected', 'connecting', 'connected', 'error'
-        self.tiktok_username: str = config.get("default_tiktok_username", "tiktok")
+        self.tiktok_status: str = "disconnected"
+        self.tiktok_username: str = cfg.get("default_tiktok_username", "his_lordshipp")
         self.tiktok_error: Optional[str] = None
         self.tiktok_room_id: Optional[int] = None
 
-        # WebSocket connections: set of WebSocket objects
+        # WebSocket connections
         self.clients: Set[WebSocket] = set()
-        self.client_roles: Dict[WebSocket, str] = {}  # ws -> 'overlay' | 'dashboard'
+        self.client_roles: Dict[WebSocket, str] = {}
 
     def get_status_payload(self) -> Dict[str, Any]:
         overlay_count = sum(1 for role in self.client_roles.values() if role == "overlay")
         dashboard_count = sum(1 for role in self.client_roles.values() if role == "dashboard")
         return {
             "type": "status_sync",
-            "ai_enabled": self.ai_enabled,
-            "current_prompt": self.current_prompt,
-            "default_prompt": self.default_prompt,
-            "source": self.current_source,
-            "user": self.active_user,
-            "detail": self.active_detail,
-            "timer_seconds_left": self.timer_seconds_left,
-            "timer_duration": self.timer_duration,
+            "feed_enabled": self.feed_enabled,
+            "active_clip": self.active_clip,
+            "active_theme": self.active_theme,
+            "gift_mappings": self.gift_mappings,
             "tiktok": {
                 "status": self.tiktok_status,
                 "username": self.tiktok_username,
@@ -219,9 +166,7 @@ class LiveStreamManager:
         self.clients.add(websocket)
         self.client_roles[websocket] = role
         logger.info(f"WebSocket client connected ({role}). Total: {len(self.clients)}")
-        # Send initial status snapshot to the connecting client
         await websocket.send_json(self.get_status_payload())
-        # Notify other clients of updated client counts
         await self.broadcast(self.get_status_payload(), target_role="dashboard")
 
     def _remove_client(self, websocket: WebSocket):
@@ -229,7 +174,6 @@ class LiveStreamManager:
             self.clients.remove(websocket)
         if websocket in self.client_roles:
             del self.client_roles[websocket]
-        logger.info(f"WebSocket client disconnected. Total: {len(self.clients)}")
 
     async def disconnect_client(self, websocket: WebSocket):
         self._remove_client(websocket)
@@ -251,261 +195,179 @@ class LiveStreamManager:
         for dead in dead_clients:
             self._remove_client(dead)
 
-    async def set_prompt(
-        self,
-        prompt: str,
-        source: str = "dashboard",
-        user: Optional[str] = None,
-        detail: Optional[str] = None,
-        duration: Optional[int] = None
-    ):
-        """
-        Push new prompt to all clients (especially overlay).
-        If duration is provided (e.g. 15s for TikTok commands/gifts),
-        starts an auto-reset countdown back to default prompt.
-        """
-        # Cancel any pending reset countdown
-        if self.reset_task and not self.reset_task.done():
-            self.reset_task.cancel()
-            self.reset_task = None
+    async def trigger_clip(self, clip_name: str, user: str = "Streamer", source: str = "dashboard", detail: str = ""):
+        """Trigger a viral video clip across all overlays and dashboard monitors."""
+        media_dir = get_media_dir()
+        clip_path = os.path.join(media_dir, clip_name)
+        if not os.path.exists(clip_path):
+            logger.warning(f"Clip not found: {clip_path}")
+            return False
 
-        # If prompt starts with command prefix '!ai ', strip it
-        clean_prompt = prompt.strip()
-        if clean_prompt.lower().startswith("!ai "):
-            clean_prompt = clean_prompt[4:].strip()
+        name_display = os.path.splitext(clip_name)[0].replace("_", " ").title()
+        self.active_clip = {
+            "clip": clip_name,
+            "name": name_display,
+            "url": f"/media/{clip_name}",
+            "user": user,
+            "source": source,
+            "detail": detail,
+            "timestamp": time.time()
+        }
 
-        self.current_prompt = clean_prompt
-        self.current_source = source
-        self.active_user = user
-        self.active_detail = detail
+        payload = {
+            "type": "play_clip",
+            "clip": clip_name,
+            "name": name_display,
+            "url": f"/media/{clip_name}",
+            "user": user,
+            "source": source,
+            "detail": detail
+        }
+        logger.info(f"Triggering clip: {clip_name} (by {user} via {source})")
+        await self.broadcast(payload)
+        return True
 
-        logger.info(f"Setting AI prompt: '{self.current_prompt}' (source: {source}, user: {user}, duration: {duration})")
+    async def stop_clip(self):
+        """Stop active clip and seamlessly return overlay to raw webcam."""
+        self.active_clip = None
+        await self.broadcast({"type": "stop_clip"})
+        logger.info("Stopped active clip - return to webcam.")
 
-        # Broadcast prompt change immediately
-        await self.broadcast({
-            "type": "set_prompt",
-            "prompt": self.current_prompt,
-            "source": self.current_source,
-            "user": self.active_user,
-            "detail": self.active_detail,
-            "duration": duration
-        })
-
-        if duration and duration > 0:
-            self.timer_duration = duration
-            self.timer_seconds_left = duration
-            self.reset_task = asyncio.create_task(self._run_countdown_and_reset(duration))
-        else:
-            self.timer_seconds_left = 0
-            self.timer_duration = 0
-            await self.broadcast({
-                "type": "timer_tick",
-                "seconds_left": 0,
-                "duration": 0,
-                "prompt": self.current_prompt
-            })
-
-    async def _run_countdown_and_reset(self, duration: int):
-        """Asynchronous countdown loop that resets prompt after duration."""
-        try:
-            for remaining in range(duration, 0, -1):
-                self.timer_seconds_left = remaining
-                await self.broadcast({
-                    "type": "timer_tick",
-                    "seconds_left": remaining,
-                    "duration": duration,
-                    "prompt": self.current_prompt,
-                    "source": self.current_source,
-                    "user": self.active_user
-                })
-                await asyncio.sleep(1)
-
-            # Timer expired! Reset back to default prompt
-            logger.info("15-second TikTok effect expired. Resetting back to default prompt.")
-            self.timer_seconds_left = 0
-            self.timer_duration = 0
-            self.current_prompt = self.default_prompt
-            self.current_source = "default"
-            self.active_user = None
-            self.active_detail = None
-
-            await self.broadcast({
-                "type": "set_prompt",
-                "prompt": self.current_prompt,
-                "source": "default_reset",
-                "user": None,
-                "detail": "Reset after timer expired",
-                "duration": None
-            })
-            await self.broadcast({
-                "type": "timer_tick",
-                "seconds_left": 0,
-                "duration": 0,
-                "prompt": self.current_prompt
-            })
-        except asyncio.CancelledError:
-            # Overridden by another prompt command
-            pass
-
-    async def toggle_ai(self, enabled: bool):
-        """Toggle AI WebRTC stream on or off to save API costs."""
-        self.ai_enabled = enabled
-        logger.info(f"AI Stream toggled to: {'ON' if enabled else 'OFF'}")
-        await self.broadcast({
-            "type": "toggle_ai",
-            "enabled": self.ai_enabled
-        })
+    async def set_feed_enabled(self, enabled: bool):
+        """Enable or disable the video feed / live review."""
+        self.feed_enabled = enabled
+        logger.info(f"Video feed state changed: {'ENABLED' if enabled else 'DISABLED'}")
+        await self.broadcast({"type": "feed_status", "enabled": enabled})
 
     # --------------------------------------------------------------------------
-    # TikTok Live Connection Manager
+    # TikTok Live Client
     # --------------------------------------------------------------------------
     async def start_tiktok(self, username: str):
-        """Connect to TikTok Live stream for the specified username."""
+        """Connect to TikTok Live room."""
         if not TIKTOK_AVAILABLE:
             self.tiktok_status = "error"
-            self.tiktok_error = "TikTokLive library not available."
+            self.tiktok_error = "TikTokLive package not installed"
             await self.broadcast(self.get_status_payload())
             return
 
-        # If already running for this user, return
-        if self.tiktok_client and self.tiktok_status == "connected" and self.tiktok_username == username:
+        username = username.strip().replace("@", "")
+        if not username:
             return
 
-        # Disconnect any existing session
         await self.stop_tiktok()
-
-        self.tiktok_username = username.strip().lstrip("@")
+        self.tiktok_username = username
         self.tiktok_status = "connecting"
         self.tiktok_error = None
-        self.tiktok_room_id = None
-        logger.info(f"Initiating TikTok Live connection for @{self.tiktok_username}...")
-        await self.broadcast(self.get_status_payload())
+        await self.broadcast({
+            "type": "tiktok_status",
+            "status": "connecting",
+            "username": username
+        })
 
-        # Create client instance
-        client = TikTokLiveClient(unique_id=f"@{self.tiktok_username}")
-        self.tiktok_client = client
-
-        # Event Handlers
-        @client.on(ConnectEvent)
-        async def on_connect(event: ConnectEvent):
-            self.tiktok_status = "connected"
-            self.tiktok_room_id = getattr(client, "room_id", None)
-            logger.info(f"Successfully connected to TikTok Live: @{self.tiktok_username} (Room ID: {self.tiktok_room_id})")
-            await self.broadcast({
-                "type": "tiktok_status",
-                "status": "connected",
-                "username": self.tiktok_username,
-                "room_id": self.tiktok_room_id
-            })
-
-        @client.on(DisconnectEvent)
-        async def on_disconnect(event: DisconnectEvent):
-            self.tiktok_status = "disconnected"
-            logger.info(f"Disconnected from TikTok Live: @{self.tiktok_username}")
-            await self.broadcast({
-                "type": "tiktok_status",
-                "status": "disconnected",
-                "username": self.tiktok_username
-            })
-
-        @client.on(LiveEndEvent)
-        async def on_live_end(event: LiveEndEvent):
-            self.tiktok_status = "disconnected"
-            self.tiktok_error = "Live stream ended."
-            logger.info(f"TikTok Live stream ended for @{self.tiktok_username}")
-            await self.broadcast({
-                "type": "tiktok_status",
-                "status": "disconnected",
-                "username": self.tiktok_username,
-                "error": "Stream ended"
-            })
-
-        @client.on(CommentEvent)
-        async def on_comment(event: CommentEvent):
-            comment_text = event.comment.strip()
-            user_unique_id = getattr(event.user, "unique_id", "Viewer")
-            user_nickname = getattr(event.user, "nickname", user_unique_id)
-
-            # Broadcast incoming chat to dashboard live log
-            await self.broadcast({
-                "type": "tiktok_chat",
-                "user": user_unique_id,
-                "nickname": user_nickname,
-                "comment": comment_text,
-                "is_command": comment_text.lower().startswith("!ai ")
-            }, target_role="dashboard")
-
-            # Check for AI command trigger: !ai <prompt>
-            if comment_text.lower().startswith("!ai "):
-                prompt_arg = comment_text[4:].strip()
-                if prompt_arg:
-                    config = load_config()
-                    duration = int(config.get("command_duration_seconds", 15))
-                    logger.info(f"TikTok Chat Command '!ai' triggered by @{user_unique_id}: '{prompt_arg}'")
-                    await self.set_prompt(
-                        prompt=prompt_arg,
-                        source="tiktok_comment",
-                        user=f"@{user_unique_id}",
-                        detail=f"Chat: {comment_text}",
-                        duration=duration
-                    )
-
-        @client.on(GiftEvent)
-        async def on_gift(event: GiftEvent):
-            user_unique_id = getattr(event.user, "unique_id", "Viewer")
-            user_nickname = getattr(event.user, "nickname", user_unique_id)
-            
-            # Extract gift name
-            gift_name = "Gift"
-            if hasattr(event, "gift") and event.gift:
-                gift_name = getattr(event.gift, "name", None) or getattr(event.gift, "describe", "Gift")
-            repeat_count = getattr(event, "repeat_count", 1) or 1
-            diamond_count = getattr(event.gift, "diamond_count", 0) if hasattr(event, "gift") and event.gift else 0
-
-            config = load_config()
-            gift_actions = config.get("gift_actions", {})
-            mapped_prompt = gift_actions.get(gift_name)
-
-            # Broadcast gift to dashboard live log
-            await self.broadcast({
-                "type": "tiktok_gift",
-                "user": user_unique_id,
-                "nickname": user_nickname,
-                "gift_name": gift_name,
-                "repeat_count": repeat_count,
-                "diamond_count": diamond_count,
-                "triggered_prompt": mapped_prompt
-            }, target_role="dashboard")
-
-            # Trigger AI prompt effect if gift is mapped in config.json
-            if mapped_prompt:
-                duration = int(config.get("command_duration_seconds", 15))
-                logger.info(f"TikTok Gift '{gift_name}' received from @{user_unique_id}! Triggering: '{mapped_prompt}'")
-                await self.set_prompt(
-                    prompt=mapped_prompt,
-                    source="tiktok_gift",
-                    user=f"@{user_unique_id}",
-                    detail=f"Gift: {repeat_count}x {gift_name}",
-                    duration=duration
-                )
-
-        # Run client asynchronously in background task
         async def run_client():
+            loop = asyncio.get_running_loop()
             try:
-                await client.start()
-            except UserOfflineError:
-                self.tiktok_status = "error"
-                self.tiktok_error = f"User @{self.tiktok_username} is currently offline."
-                logger.warning(self.tiktok_error)
-            except TikTokLiveError as e:
-                self.tiktok_status = "error"
-                self.tiktok_error = f"TikTokLive error: {str(e)}"
-                logger.error(self.tiktok_error)
+                self.tiktok_client = TikTokLiveClient(unique_id=username)
+
+                @self.tiktok_client.on(ConnectEvent)
+                async def on_connect(event: ConnectEvent):
+                    self.tiktok_status = "connected"
+                    self.tiktok_room_id = getattr(event, "room_id", None)
+                    logger.info(f"Connected to TikTok Live: @{username} (Room ID: {self.tiktok_room_id})")
+                    await self.broadcast({
+                        "type": "tiktok_status",
+                        "status": "connected",
+                        "username": username,
+                        "room_id": self.tiktok_room_id
+                    })
+
+                @self.tiktok_client.on(DisconnectEvent)
+                async def on_disconnect(event: DisconnectEvent):
+                    self.tiktok_status = "disconnected"
+                    logger.info(f"Disconnected from TikTok Live: @{username}")
+                    await self.broadcast({
+                        "type": "tiktok_status",
+                        "status": "disconnected",
+                        "username": username
+                    })
+
+                @self.tiktok_client.on(CommentEvent)
+                async def on_comment(event: CommentEvent):
+                    comment_text = event.comment.strip()
+                    user_nick = getattr(event.user, "nickname", event.user.unique_id)
+                    user_handle = event.user.unique_id
+
+                    # Check for clip command: !clip <name> or !<name>
+                    matched_clip = None
+                    if comment_text.lower().startswith("!clip "):
+                        query = comment_text[6:].strip().lower()
+                        # Search in media clips
+                        for f in os.listdir(get_media_dir()):
+                            if query in f.lower():
+                                matched_clip = f
+                                break
+                    elif comment_text.startswith("!"):
+                        query = comment_text[1:].strip().lower()
+                        for f in os.listdir(get_media_dir()):
+                            if query in os.path.splitext(f)[0].lower():
+                                matched_clip = f
+                                break
+
+                    is_command = matched_clip is not None
+                    await self.broadcast({
+                        "type": "tiktok_chat",
+                        "user": user_handle,
+                        "nickname": user_nick,
+                        "comment": comment_text,
+                        "is_command": is_command,
+                        "triggered_clip": matched_clip
+                    }, target_role="dashboard")
+
+                    if matched_clip:
+                        await self.trigger_clip(
+                            clip_name=matched_clip,
+                            user=f"@{user_handle}",
+                            source="tiktok_comment",
+                            detail=f"Chat: {comment_text}"
+                        )
+
+                @self.tiktok_client.on(GiftEvent)
+                async def on_gift(event: GiftEvent):
+                    gift_name = event.gift.name
+                    user_nick = getattr(event.user, "nickname", event.user.unique_id)
+                    user_handle = event.user.unique_id
+                    repeat_count = getattr(event, "repeat_count", 1)
+                    diamond_count = getattr(event.gift, "diamond_count", 0)
+
+                    # Look up gift mapping
+                    cfg = load_config()
+                    mappings = cfg.get("gift_mappings", {})
+                    matched_clip = mappings.get(gift_name)
+
+                    await self.broadcast({
+                        "type": "tiktok_gift",
+                        "user": user_handle,
+                        "nickname": user_nick,
+                        "gift_name": gift_name,
+                        "repeat_count": repeat_count,
+                        "diamond_count": diamond_count,
+                        "triggered_clip": matched_clip
+                    }, target_role="dashboard")
+
+                    if matched_clip:
+                        await self.trigger_clip(
+                            clip_name=matched_clip,
+                            user=f"@{user_handle}",
+                            source="tiktok_gift",
+                            detail=f"Gift: {repeat_count}x {gift_name}"
+                        )
+
+                await self.tiktok_client.start()
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
-                self.tiktok_status = "error"
-                self.tiktok_error = f"Connection error: {str(e)}"
-                logger.error(self.tiktok_error)
-            finally:
+                logger.error(f"TikTok Live connection error: {e}")
+                self.tiktok_error = str(e)
                 if self.tiktok_status == "connecting":
                     self.tiktok_status = "error"
                 await self.broadcast(self.get_status_payload())
@@ -518,7 +380,7 @@ class LiveStreamManager:
             try:
                 await self.tiktok_client.disconnect()
             except Exception as e:
-                logger.warning(f"Error while disconnecting TikTok client: {e}")
+                logger.warning(f"Error disconnecting TikTok client: {e}")
             self.tiktok_client = None
 
         if self.tiktok_task and not self.tiktok_task.done():
@@ -534,7 +396,7 @@ class LiveStreamManager:
             "username": self.tiktok_username
         })
 
-# Instantiate global stream manager
+# Global manager instance
 manager = LiveStreamManager()
 
 # ==============================================================================
@@ -543,22 +405,18 @@ manager = LiveStreamManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: ensure config exists and initialize default prompt
     cfg = load_config()
-    manager.default_prompt = cfg.get("default_prompt", "Cinematic lighting, high detail, masterpiece")
-    manager.current_prompt = manager.default_prompt
-    logger.info("FastAPI Live-Stream Video Effects Controller initialized.")
+    manager.gift_mappings = cfg.get("gift_mappings", {})
+    manager.active_theme = cfg.get("active_theme", "obsidian_neon")
+    logger.info("SSwurve TikTok Live Viral Stream Controller initialized.")
     yield
-    # Shutdown: cleanly close TikTok client and tasks
     logger.info("Shutting down controller...")
     await manager.stop_tiktok()
-    if manager.reset_task and not manager.reset_task.done():
-        manager.reset_task.cancel()
 
 app = FastAPI(
-    title="Decart Live-Stream AI Video Effects Controller",
-    description="Realtime AI Video-to-Video controller with WebSockets and TikTok Live integration",
-    version="1.0.0",
+    title="SSwurve Viral AI Live-Stream Controller",
+    description="Photoreal viral video-clip soundboard, camera overlay, and TikTok Live integration",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -570,264 +428,183 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount media_clips directory for viral video clips
+# Mount media directory for video playback
 app.mount("/media", StaticFiles(directory=get_media_dir()), name="media")
 
 # ==============================================================================
-# API Endpoints
+# HTTP Routes
 # ==============================================================================
 
 @app.get("/")
 async def root():
-    """Redirect root to dashboard."""
     return Response(status_code=302, headers={"Location": "/dashboard"})
 
 @app.get("/favicon.ico")
 async def favicon():
     return Response(status_code=204)
 
+@app.get("/overlay", response_class=HTMLResponse)
+async def serve_overlay():
+    """OBS Browser Source or Fullscreen Overlay."""
+    templates_dir = get_templates_dir()
+    path = os.path.join(templates_dir, "overlay.html")
+    if not os.path.exists(path):
+        return HTMLResponse("<h3>overlay.html not found</h3>", status_code=404)
+    with open(path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard():
+    """Streamer Control Deck."""
+    templates_dir = get_templates_dir()
+    path = os.path.join(templates_dir, "dashboard.html")
+    if not os.path.exists(path):
+        return HTMLResponse("<h3>dashboard.html not found</h3>", status_code=404)
+    with open(path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
 @app.get("/api/clips")
 async def list_media_clips():
-    """List all available pre-rendered video clips in media_clips/."""
+    """List all available viral video clips in media_clips/."""
     media_dir = get_media_dir()
     clips = []
     if os.path.exists(media_dir):
-        for f in os.listdir(media_dir):
+        files = sorted(os.listdir(media_dir))
+        for f in files:
             if f.lower().endswith((".mp4", ".webm", ".mov")):
+                full_path = os.path.join(media_dir, f)
+                stat = os.stat(full_path)
                 clips.append({
                     "filename": f,
                     "name": os.path.splitext(f)[0].replace("_", " ").title(),
-                    "url": f"/media/{f}"
+                    "url": f"/media/{f}",
+                    "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                    "modified": stat.st_mtime
                 })
     return {"clips": clips}
 
 @app.post("/api/play_clip")
 async def api_play_clip(request: Request):
-    """Trigger a pre-rendered video clip to play seamlessly on the overlay."""
+    """Trigger a viral video clip to play on the overlay."""
     data = await request.json()
     clip_name = data.get("clip")
+    user = data.get("user", "Streamer")
+    source = data.get("source", "dashboard")
+    detail = data.get("detail", "")
     if not clip_name:
         return JSONResponse(status_code=400, content={"error": "Clip name required"})
-    await manager.broadcast({
-        "type": "play_clip",
-        "clip": clip_name,
-        "url": f"/media/{clip_name}",
-        "user": data.get("user")
-    })
+    
+    success = await manager.trigger_clip(clip_name, user=user, source=source, detail=detail)
+    if not success:
+        return JSONResponse(status_code=404, content={"error": f"Clip '{clip_name}' not found"})
     return {"success": True, "clip": clip_name}
 
-@app.get("/overlay", response_class=HTMLResponse)
-async def serve_overlay():
-    """Serve the overlay.html file for OBS browser source or browser window."""
-    templates_dir = get_templates_dir()
-    overlay_path = os.path.join(templates_dir, "overlay.html")
-    if not os.path.exists(overlay_path):
-        return HTMLResponse(
-            f"<h3>Error: overlay.html not found in {templates_dir}</h3>",
-            status_code=404
-        )
-    with open(overlay_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    return HTMLResponse(content=content)
+@app.post("/api/stop_clip")
+async def api_stop_clip():
+    """Stop active clip and return to webcam."""
+    await manager.stop_clip()
+    return {"success": True}
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def serve_dashboard():
-    """Serve the dashboard.html file for stream management console."""
-    templates_dir = get_templates_dir()
-    dashboard_path = os.path.join(templates_dir, "dashboard.html")
-    if not os.path.exists(dashboard_path):
-        return HTMLResponse(
-            f"<h3>Error: dashboard.html not found in {templates_dir}</h3>",
-            status_code=404
-        )
-    with open(dashboard_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    return HTMLResponse(content=content)
+@app.post("/api/feed_toggle")
+async def api_feed_toggle(request: Request):
+    """Enable or disable the video feed / live review."""
+    data = await request.json()
+    enabled = bool(data.get("enabled", True))
+    await manager.set_feed_enabled(enabled)
+    return {"success": True, "feed_enabled": enabled}
 
-@app.get("/api/token")
-@app.post("/api/token")
-async def get_decart_token():
-    """
-    Securely mints/serves a client token for the Decart Realtime JS SDK
-    (@decartai/sdk using models.realtime('lucy-latest')).
-    Reads the permanent DECART_API_KEY from config.json so it never leaks to the browser.
-    """
-    config = load_config()
-    api_key = config.get("DECART_API_KEY", "").strip()
+@app.post("/api/upload_clip")
+async def api_upload_clip(file: UploadFile = File(...)):
+    """Upload a new .mp4/.webm clip directly into media_clips/."""
+    filename = os.path.basename(file.filename or "video.mp4")
+    if not filename.lower().endswith((".mp4", ".webm", ".mov")):
+        raise HTTPException(status_code=400, detail="Only .mp4, .webm, or .mov files allowed")
+    
+    save_path = os.path.join(get_media_dir(), filename)
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    logger.info(f"Uploaded new clip: {filename}")
+    await manager.broadcast({"type": "clips_updated"})
+    return {"success": True, "filename": filename, "url": f"/media/{filename}"}
 
-    if not api_key or api_key == "YOUR_DECART_API_KEY_HERE":
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "DECART_API_KEY is not configured in config.json. Please set your Decart API key in the dashboard or config.json.",
-                "apiKey": None,
-                "configured": False
-            }
-        )
-
-    # Call Decart Token Minting Endpoint
-    url = "https://api.decart.ai/v1/client/tokens"
-    headers = {
-        "x-api-key": api_key,
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "expiresIn": 3600,
-        "allowedModels": ["lucy-latest", "lucy-2.6", "lucy-2.1"],
-        "constraints": {
-            "realtime": {
-                "maxSessionDuration": 3600
-            }
-        }
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as http_client:
-            resp = await http_client.post(url, headers=headers, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                client_token = data.get("apiKey") or data.get("token")
-                return {
-                    "apiKey": client_token,
-                    "expiresAt": data.get("expiresAt"),
-                    "configured": True,
-                    "model": "lucy-latest"
-                }
-            else:
-                logger.error(f"Decart Token API failed: {resp.status_code} - {resp.text}")
-                return JSONResponse(
-                    status_code=resp.status_code,
-                    content={
-                        "error": f"Decart API error ({resp.status_code}): {resp.text}",
-                        "apiKey": None,
-                        "configured": True
-                    }
-                )
-    except Exception as e:
-        logger.error(f"Exception during Decart Token minting: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": f"Failed to contact Decart API: {str(e)}",
-                "apiKey": None,
-                "configured": True
-            }
-        )
+@app.delete("/api/clips/{filename}")
+async def api_delete_clip(filename: str):
+    """Delete a clip from media_clips/."""
+    clean_name = os.path.basename(filename)
+    path = os.path.join(get_media_dir(), clean_name)
+    if os.path.exists(path):
+        os.remove(path)
+        await manager.broadcast({"type": "clips_updated"})
+        return {"success": True}
+    return JSONResponse(status_code=404, content={"error": "File not found"})
 
 @app.get("/api/config")
 async def get_config():
-    """Retrieve current configuration (with DECART_API_KEY partially masked for safety)."""
-    cfg = load_config()
-    safe_cfg = cfg.copy()
-    key = safe_cfg.get("DECART_API_KEY", "")
-    if key and key != "YOUR_DECART_API_KEY_HERE" and len(key) > 8:
-        safe_cfg["DECART_API_KEY_MASKED"] = f"{key[:4]}...{key[-4:]}"
-        safe_cfg["is_key_configured"] = True
-    else:
-        safe_cfg["DECART_API_KEY_MASKED"] = "Not set"
-        safe_cfg["is_key_configured"] = False
-    return safe_cfg
+    return load_config()
 
 @app.post("/api/config")
 async def update_config(request: Request):
-    """Update configuration values and persist to config.json."""
-    try:
-        body = await request.json()
-        cfg = load_config()
-
-        # Update allowed fields
-        if "DECART_API_KEY" in body and body["DECART_API_KEY"]:
-            cfg["DECART_API_KEY"] = body["DECART_API_KEY"].strip()
-        if "default_tiktok_username" in body:
-            cfg["default_tiktok_username"] = body["default_tiktok_username"].strip()
-            manager.tiktok_username = cfg["default_tiktok_username"]
-        if "default_prompt" in body:
-            cfg["default_prompt"] = body["default_prompt"].strip()
-            manager.default_prompt = cfg["default_prompt"]
-        if "command_duration_seconds" in body:
-            cfg["command_duration_seconds"] = int(body["command_duration_seconds"])
-        if "default_off_mode" in body:
-            cfg["default_off_mode"] = body["default_off_mode"]
-        if "preset_prompts" in body and isinstance(body["preset_prompts"], list):
-            cfg["preset_prompts"] = body["preset_prompts"]
-        if "gift_actions" in body and isinstance(body["gift_actions"], dict):
-            cfg["gift_actions"] = body["gift_actions"]
-
-        saved = save_config(cfg)
-        await manager.broadcast({
-            "type": "config_updated",
-            "config": cfg
-        })
-        return {"success": saved, "config": cfg}
-    except Exception as e:
-        logger.error(f"Error updating config: {e}")
-        return JSONResponse(status_code=400, content={"error": str(e)})
+    """Update and persist configuration."""
+    data = await request.json()
+    cfg = load_config()
+    for key in ["default_tiktok_username", "active_theme", "overlay_audio", "overlay_volume", "show_hud_on_clip", "gift_mappings"]:
+        if key in data:
+            cfg[key] = data[key]
+    saved = save_config(cfg)
+    manager.gift_mappings = cfg.get("gift_mappings", {})
+    manager.active_theme = cfg.get("active_theme", "obsidian_neon")
+    await manager.broadcast({"type": "config_updated", "config": cfg})
+    return {"success": saved, "config": cfg}
 
 @app.get("/api/status")
 async def get_status():
-    """Get current controller status."""
     return manager.get_status_payload()
-
-@app.post("/api/prompt")
-async def api_set_prompt(request: Request):
-    """Set AI prompt via REST API."""
-    data = await request.json()
-    prompt = data.get("prompt", "").strip()
-    source = data.get("source", "api")
-    user = data.get("user")
-    duration = data.get("duration")
-    if not prompt:
-        return JSONResponse(status_code=400, content={"error": "Prompt cannot be empty"})
-    await manager.set_prompt(prompt, source=source, user=user, duration=duration)
-    return {"success": True, "prompt": prompt}
-
-@app.post("/api/ai_toggle")
-async def api_toggle_ai(request: Request):
-    """Toggle AI stream on/off via REST API."""
-    data = await request.json()
-    enabled = bool(data.get("enabled", True))
-    await manager.toggle_ai(enabled)
-    return {"success": True, "ai_enabled": enabled}
 
 @app.post("/api/simulate")
 async def api_simulate_event(request: Request):
-    """
-    Simulate a TikTok chat command (!ai <prompt>) or Gift event for testing
-    without requiring a live stream.
-    """
+    """Simulate a TikTok chat comment or Gift event for testing without a live stream."""
     data = await request.json()
-    sim_type = data.get("type", "comment")  # 'comment' or 'gift'
-    user = data.get("user", "Viewer123")
-    config = load_config()
-    duration = int(config.get("command_duration_seconds", 15))
+    sim_type = data.get("type", "comment")
+    user = data.get("user", "TikTokViewer")
+    cfg = load_config()
+    mappings = cfg.get("gift_mappings", {})
 
     if sim_type == "comment":
-        prompt = data.get("prompt", "Cyberpunk Neon City").strip()
-        raw_comment = f"!ai {prompt}"
-        # Broadcast chat event to dashboard feed
+        comment = data.get("comment", "!clip dragon")
+        matched_clip = None
+        query = comment.lower().replace("!clip", "").replace("!", "").strip()
+        for f in os.listdir(get_media_dir()):
+            if query and query in f.lower():
+                matched_clip = f
+                break
+        if not matched_clip and os.listdir(get_media_dir()):
+            matched_clip = os.listdir(get_media_dir())[0]
+
         await manager.broadcast({
             "type": "tiktok_chat",
             "user": user,
             "nickname": user,
-            "comment": raw_comment,
-            "is_command": True
+            "comment": comment,
+            "is_command": True,
+            "triggered_clip": matched_clip
         }, target_role="dashboard")
-        # Trigger effect
-        await manager.set_prompt(
-            prompt=prompt,
-            source="tiktok_comment",
-            user=f"@{user}",
-            detail=f"Simulated Chat: {raw_comment}",
-            duration=duration
-        )
-        return {"success": True, "simulated": "comment", "prompt": prompt}
+
+        if matched_clip:
+            await manager.trigger_clip(
+                clip_name=matched_clip,
+                user=f"@{user}",
+                source="tiktok_comment",
+                detail=f"Simulated: {comment}"
+            )
+        return {"success": True, "simulated": "comment", "clip": matched_clip}
 
     elif sim_type == "gift":
         gift_name = data.get("gift_name", "Rose")
-        gift_actions = config.get("gift_actions", {})
-        mapped_prompt = gift_actions.get(gift_name, "Cinematic flower explosion VFX")
-        # Broadcast gift event to dashboard feed
+        matched_clip = mappings.get(gift_name)
+        if not matched_clip and os.listdir(get_media_dir()):
+            matched_clip = os.listdir(get_media_dir())[0]
+
         await manager.broadcast({
             "type": "tiktok_gift",
             "user": user,
@@ -835,17 +612,17 @@ async def api_simulate_event(request: Request):
             "gift_name": gift_name,
             "repeat_count": 1,
             "diamond_count": 1,
-            "triggered_prompt": mapped_prompt
+            "triggered_clip": matched_clip
         }, target_role="dashboard")
-        # Trigger effect
-        await manager.set_prompt(
-            prompt=mapped_prompt,
-            source="tiktok_gift",
-            user=f"@{user}",
-            detail=f"Simulated Gift: 1x {gift_name}",
-            duration=duration
-        )
-        return {"success": True, "simulated": "gift", "gift": gift_name, "prompt": mapped_prompt}
+
+        if matched_clip:
+            await manager.trigger_clip(
+                clip_name=matched_clip,
+                user=f"@{user}",
+                source="tiktok_gift",
+                detail=f"Simulated Gift: 1x {gift_name}"
+            )
+        return {"success": True, "simulated": "gift", "gift": gift_name, "clip": matched_clip}
 
     return JSONResponse(status_code=400, content={"error": "Invalid simulation type"})
 
@@ -855,11 +632,6 @@ async def api_simulate_event(request: Request):
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    Central real-time WebSocket connection handling prompts, AI toggles,
-    TikTok events, and countdown timers.
-    Query param ?client=overlay or ?client=dashboard identifies role.
-    """
     client_role = websocket.query_params.get("client", "general")
     await manager.connect_client(websocket, role=client_role)
     try:
@@ -867,20 +639,20 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("type")
 
-            if action == "set_prompt":
-                prompt = data.get("prompt", "").strip()
+            if action == "play_clip":
+                clip_name = data.get("clip")
+                user = data.get("user", "Streamer")
                 source = data.get("source", "dashboard")
-                user = data.get("user")
-                duration = data.get("duration")
-                if prompt:
-                    await manager.set_prompt(prompt, source=source, user=user, duration=duration)
+                detail = data.get("detail", "")
+                if clip_name:
+                    await manager.trigger_clip(clip_name, user=user, source=source, detail=detail)
 
-            elif action == "toggle_ai":
+            elif action == "stop_clip":
+                await manager.stop_clip()
+
+            elif action == "feed_toggle":
                 enabled = bool(data.get("enabled", True))
-                await manager.toggle_ai(enabled)
-
-            elif action == "reset_default":
-                await manager.set_prompt(manager.default_prompt, source="default", duration=None)
+                await manager.set_feed_enabled(enabled)
 
             elif action == "tiktok_connect":
                 username = data.get("username", manager.tiktok_username)
@@ -893,27 +665,35 @@ async def websocket_endpoint(websocket: WebSocket):
                 sim_type = data.get("sim_type", "comment")
                 sim_user = data.get("user", "Viewer123")
                 cfg = load_config()
-                duration = int(cfg.get("command_duration_seconds", 15))
+                mappings = cfg.get("gift_mappings", {})
                 if sim_type == "comment":
-                    prompt = data.get("prompt", "Cyberpunk Neon City")
+                    raw_comment = data.get("comment", "!clip dragon")
+                    matched = None
+                    query = raw_comment.lower().replace("!clip", "").replace("!", "").strip()
+                    for f in os.listdir(get_media_dir()):
+                        if query and query in f.lower():
+                            matched = f
+                            break
+                    if not matched and os.listdir(get_media_dir()):
+                        matched = os.listdir(get_media_dir())[0]
+
                     await manager.broadcast({
                         "type": "tiktok_chat",
                         "user": sim_user,
                         "nickname": sim_user,
-                        "comment": f"!ai {prompt}",
-                        "is_command": True
+                        "comment": raw_comment,
+                        "is_command": True,
+                        "triggered_clip": matched
                     }, target_role="dashboard")
-                    await manager.set_prompt(
-                        prompt=prompt,
-                        source="tiktok_comment",
-                        user=f"@{sim_user}",
-                        detail=f"Chat: !ai {prompt}",
-                        duration=duration
-                    )
+                    if matched:
+                        await manager.trigger_clip(matched, user=f"@{sim_user}", source="tiktok_comment", detail=f"Simulated: {raw_comment}")
+
                 elif sim_type == "gift":
                     gift_name = data.get("gift_name", "Rose")
-                    gift_actions = cfg.get("gift_actions", {})
-                    mapped_prompt = gift_actions.get(gift_name, "Cinematic vibrant rose petals")
+                    matched = mappings.get(gift_name)
+                    if not matched and os.listdir(get_media_dir()):
+                        matched = os.listdir(get_media_dir())[0]
+
                     await manager.broadcast({
                         "type": "tiktok_gift",
                         "user": sim_user,
@@ -921,25 +701,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         "gift_name": gift_name,
                         "repeat_count": 1,
                         "diamond_count": 1,
-                        "triggered_prompt": mapped_prompt
+                        "triggered_clip": matched
                     }, target_role="dashboard")
-                    await manager.set_prompt(
-                        prompt=mapped_prompt,
-                        source="tiktok_gift",
-                        user=f"@{sim_user}",
-                        detail=f"Gift: 1x {gift_name}",
-                        duration=duration
-                    )
+                    if matched:
+                        await manager.trigger_clip(matched, user=f"@{sim_user}", source="tiktok_gift", detail=f"Simulated Gift: 1x {gift_name}")
 
-            elif action == "play_clip":
-                clip_name = data.get("clip")
-                if clip_name:
-                    await manager.broadcast({
-                        "type": "play_clip",
-                        "clip": clip_name,
-                        "url": f"/media/{clip_name}",
-                        "user": data.get("user")
-                    })
+            elif action == "set_theme":
+                theme = data.get("theme", "obsidian_neon")
+                manager.active_theme = theme
+                cfg = load_config()
+                cfg["active_theme"] = theme
+                save_config(cfg)
+                await manager.broadcast({"type": "theme_changed", "theme": theme})
 
             elif action == "request_status":
                 await websocket.send_json(manager.get_status_payload())
@@ -954,26 +727,33 @@ async def websocket_endpoint(websocket: WebSocket):
 # Browser Launcher & Entrypoint
 # ==============================================================================
 
-def open_dashboard_in_browser(host: str, port: int, delay: float = 1.2):
-    """Open /dashboard in user's default browser after uvicorn initializes."""
-    def _run():
-        time.sleep(delay)
+def open_dashboard_in_browser(host: str, port: int, delay_seconds: float = 1.2):
+    """Automatically open dashboard URL in default browser after server boots."""
+    def _open():
+        time.sleep(delay_seconds)
         url = f"http://{host}:{port}/dashboard"
         logger.info(f"Opening browser at: {url}")
         try:
             webbrowser.open(url)
         except Exception as e:
             logger.warning(f"Could not open browser automatically: {e}")
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_open, daemon=True).start()
+
+def run_server():
+    cfg = load_config()
+    host = cfg.get("server_host", "127.0.0.1")
+    port = int(cfg.get("server_port", 8000))
+
+    open_dashboard_in_browser(host, port)
+
+    logger.info(f"Starting SSwurve Viral Stream Controller on http://{host}:{port}")
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=False
+    )
 
 if __name__ == "__main__":
-    config = load_config()
-    server_host = config.get("server_host", "127.0.0.1")
-    server_port = int(config.get("server_port", 8000))
-
-    # Auto-open dashboard in browser
-    open_dashboard_in_browser(server_host, server_port)
-
-    # Launch uvicorn
-    logger.info(f"Starting server on http://{server_host}:{server_port}")
-    uvicorn.run(app, host=server_host, port=server_port, log_level="info")
+    run_server()

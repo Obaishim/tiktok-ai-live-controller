@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Decart AI Live-Stream Overlay</title>
+  <title>SSwurve Viral Stream Overlay</title>
   <style>
     * {
       box-sizing: border-box;
@@ -15,777 +15,363 @@
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background-color: transparent;
-      color: #fff;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       user-select: none;
     }
 
-    /* Video stage */
-    #video-container {
+    /* Video Container */
+    #stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
+    }
+
+    /* Streamer Raw Webcam */
+    #webcam-video {
       position: absolute;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background-color: transparent;
-    }
-
-    video {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      min-width: 100%;
-      min-height: 100%;
-      width: auto;
-      height: auto;
-      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
       object-fit: cover;
-      display: block;
-      transition: opacity 0.4s ease-in-out;
-    }
-
-    video.mirrored {
-      transform: translate(-50%, -50%) scaleX(-1);
-    }
-
-    #local-video {
+      transform: scaleX(-1); /* Mirror camera by default */
       z-index: 1;
-      opacity: 0;
+      transition: filter 0.3s ease;
     }
 
-    #remote-video {
+    #webcam-video.unmirrored {
+      transform: scaleX(1);
+    }
+
+    /* Pre-Rendered Viral Video Layer (Transitions over webcam) */
+    #clip-video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
       z-index: 2;
       opacity: 0;
-    }
-
-    /* Transparent mode support */
-    body.mode-transparent #video-container {
-      background-color: transparent !important;
-    }
-    body.mode-webcam #video-container {
-      background-color: #050508;
-    }
-
-    /* Streamer HUD */
-    #hud {
-      position: absolute;
-      z-index: 10;
       pointer-events: none;
-      transition: opacity 0.3s ease;
+      transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    #hud.hidden {
-      opacity: 0 !important;
-      visibility: hidden;
+    #clip-video.active {
+      opacity: 1;
     }
 
-    /* Top Left Status Badge */
-    .status-badge {
+    /* Streamer HUD Banner */
+    #hud-banner {
       position: absolute;
       top: 24px;
       left: 24px;
+      z-index: 10;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 8px 16px;
-      border-radius: 9999px;
-      background: rgba(13, 17, 23, 0.75);
+      gap: 12px;
+      padding: 10px 18px;
+      background: rgba(10, 14, 26, 0.82);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.15);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      border-radius: 999px;
+      color: #fff;
       font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
     }
 
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #888;
-      box-shadow: 0 0 8px currentColor;
-      transition: background 0.3s ease, box-shadow 0.3s ease;
+    #hud-banner.visible {
+      opacity: 1;
+      transform: translateY(0);
     }
 
-    .status-badge.ai-active .status-dot {
-      background: #10b981;
-      box-shadow: 0 0 10px #10b981;
-    }
-    .status-badge.ai-active {
-      border-color: rgba(16, 185, 129, 0.4);
-      color: #34d399;
-    }
-
-    .status-badge.ai-standby .status-dot {
-      background: #f59e0b;
-      box-shadow: 0 0 10px #f59e0b;
-    }
-    .status-badge.ai-standby {
-      border-color: rgba(245, 158, 11, 0.4);
-      color: #fbbf24;
-    }
-
-    .status-badge.ai-error .status-dot {
-      background: #ef4444;
-      box-shadow: 0 0 10px #ef4444;
-    }
-    .status-badge.ai-error {
-      border-color: rgba(239, 68, 68, 0.4);
-      color: #f87171;
-    }
-
-    /* Bottom Left Prompt & Timer Banner */
-    .prompt-banner {
-      position: absolute;
-      bottom: 28px;
-      left: 24px;
-      max-width: 580px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 16px 20px;
-      border-radius: 16px;
-      background: rgba(15, 20, 32, 0.82);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
-    }
-
-    .prompt-banner.highlight {
-      border-color: #8b5cf6;
-      box-shadow: 0 12px 40px rgba(139, 92, 246, 0.4);
-      transform: translateY(-2px) scale(1.01);
-    }
-
-    .prompt-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 12px;
-      font-weight: 700;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .source-tag {
+    .hud-badge {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
-      border-radius: 6px;
-      background: rgba(139, 92, 246, 0.2);
-      color: #c084fc;
-      border: 1px solid rgba(139, 92, 246, 0.3);
-    }
-
-    .prompt-text {
-      font-size: 16px;
-      font-weight: 600;
-      line-height: 1.4;
-      color: #f8fafc;
-      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    /* 15s Countdown Bar */
-    .timer-container {
-      display: none;
-      flex-direction: column;
-      gap: 4px;
-      margin-top: 4px;
-    }
-
-    .timer-container.active {
-      display: flex;
-    }
-
-    .timer-info {
-      display: flex;
-      justify-content: space-between;
+      gap: 5px;
+      padding: 3px 9px;
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      border-radius: 999px;
       font-size: 11px;
-      font-weight: 700;
-      color: #38bdf8;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: 0 0 12px rgba(236, 72, 153, 0.5);
     }
 
-    .timer-bar-bg {
-      width: 100%;
-      height: 5px;
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 999px;
-      overflow: hidden;
+    .hud-text {
+      font-weight: 600;
+      color: #f1f5f9;
+      letter-spacing: 0.2px;
     }
 
-    .timer-bar-fill {
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
-      border-radius: 999px;
-      transition: width 1s linear;
-    }
-
-    /* Start / Permission Overlay Modal (interactive, shown if camera needs click) */
-    #permission-modal {
+    /* Permission / Click to Start Modal */
+    #start-modal {
       position: absolute;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
       z-index: 100;
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: rgba(10, 12, 18, 0.88);
-      backdrop-filter: blur(12px);
+      background: rgba(10, 12, 22, 0.92);
+      backdrop-filter: blur(16px);
+      color: #fff;
       text-align: center;
       padding: 24px;
-      pointer-events: auto;
+      cursor: pointer;
     }
 
-    #permission-modal.hidden {
-      display: none;
+    #start-modal.active {
+      display: flex;
     }
 
-    .modal-box {
-      background: #161b26;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      padding: 32px 40px;
-      border-radius: 20px;
-      max-width: 480px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    .modal-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      animation: pulse 2s infinite ease-in-out;
     }
 
-    .modal-box h2 {
-      font-size: 22px;
-      margin-bottom: 12px;
-      background: linear-gradient(135deg, #a78bfa, #38bdf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.08); opacity: 1; }
     }
 
-    .modal-box p {
-      font-size: 14px;
-      color: #94a3b8;
-      line-height: 1.6;
-      margin-bottom: 24px;
-    }
-
-    .start-btn {
+    .btn-start {
+      margin-top: 20px;
       padding: 12px 28px;
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      border: none;
+      border-radius: 999px;
+      color: #fff;
       font-size: 15px;
       font-weight: 700;
-      color: #fff;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border: none;
-      border-radius: 12px;
+      box-shadow: 0 0 24px rgba(236, 72, 153, 0.5);
       cursor: pointer;
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-      transition: all 0.2s ease;
-    }
-
-    .start-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 24px rgba(99, 102, 241, 0.6);
-    }
-
-    /* Notification Toast */
-    #toast {
-      position: absolute;
-      top: 24px;
-      right: 24px;
-      z-index: 50;
-      padding: 12px 20px;
-      background: rgba(15, 23, 42, 0.9);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-      font-size: 13px;
-      font-weight: 500;
-      color: #e2e8f0;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      transform: translateY(-80px);
-      opacity: 0;
-      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-      pointer-events: none;
-    }
-
-    #toast.show {
-      transform: translateY(0);
-      opacity: 1;
     }
   </style>
 </head>
-<body class="mode-webcam">
+<body>
+  <div id="stage">
+    <!-- Streamer Live Webcam Feed -->
+    <video id="webcam-video" autoplay playsinline muted></video>
 
-  <!-- Fullscreen Video Stage -->
-  <div id="video-container">
-    <video id="local-video" autoplay playsinline muted></video>
-    <video id="remote-video" autoplay playsinline></video>
-    <video id="clip-video" playsinline style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 5; opacity: 0; pointer-events: none; transition: opacity 0.25s ease-in-out;"></video>
-  </div>
-
-  <!-- Streamer HUD (Press 'H' or add ?hud=0 to toggle) -->
-  <div id="hud">
-    <!-- Status Badge -->
-    <div id="status-badge" class="status-badge ai-standby">
-      <span class="status-dot"></span>
-      <span id="status-label">Initializing...</span>
+    <!-- Offline / Feed Disconnected Overlay -->
+    <div id="offline-screen" style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center; color: #64748b; font-size: 16px; font-weight: 700; letter-spacing: 1px;">
+      <span style="font-size: 32px; margin-bottom: 8px;">🛑</span>
+      <span>FEED DISCONNECTED / OFFLINE</span>
+      <span style="font-size: 12px; color: #475569; margin-top: 6px;">Enable from Dashboard Controller</span>
     </div>
 
-    <!-- Active Prompt Banner & 15s Timer -->
-    <div id="prompt-banner" class="prompt-banner">
-      <div class="prompt-header">
-        <span id="prompt-source" class="source-tag">Default Effect</span>
-        <span id="prompt-user"></span>
-      </div>
-      <div id="prompt-text" class="prompt-text">Cinematic lighting, high detail, masterpiece</div>
+    <!-- Viral Pre-Rendered AI Video Layer -->
+    <video id="clip-video" playsinline></video>
 
-      <!-- 15s Countdown -->
-      <div id="timer-container" class="timer-container">
-        <div class="timer-info">
-          <span>TikTok Viewer Effect</span>
-          <span id="timer-text">15s</span>
-        </div>
-        <div class="timer-bar-bg">
-          <div id="timer-bar-fill" class="timer-bar-fill" style="width: 100%;"></div>
-        </div>
-      </div>
+    <!-- On-Air Notification HUD -->
+    <div id="hud-banner">
+      <span class="hud-badge">🎬 ON AIR</span>
+      <span id="hud-title" class="hud-text">Playing Viral VFX</span>
+    </div>
+
+    <!-- Start / Camera Permission Overlay -->
+    <div id="start-modal">
+      <div class="modal-icon">📷</div>
+      <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 8px;">Click to Activate Camera Overlay</h2>
+      <p style="color: #94a3b8; font-size: 13px; max-width: 420px; line-height: 1.5;">
+        Browser requires user interaction to enable webcam and audio playback for OBS Studio and live streams.
+      </p>
+      <button class="btn-start">Activate Camera Feed</button>
     </div>
   </div>
 
-  <!-- Toast alert -->
-  <div id="toast"></div>
+  <script>
+    // URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const hideHudParam = urlParams.get("hud") === "0";
+    const unmirrorParam = urlParams.get("mirror") === "0";
 
-  <!-- Interactive Modal for Initial Media Stream Permission -->
-  <div id="permission-modal">
-    <div class="modal-box">
-      <h2>Decart AI Stream Ready</h2>
-      <p>Click below to grant camera access and initialize the live video effects pipeline.</p>
-      <button id="start-stream-btn" class="start-btn">Start Camera & AI Stream</button>
-    </div>
-  </div>
+    const webcamVideo = document.getElementById("webcam-video");
+    const clipVideo = document.getElementById("clip-video");
+    const hudBanner = document.getElementById("hud-banner");
+    const hudTitle = document.getElementById("hud-title");
+    const startModal = document.getElementById("start-modal");
 
-  <!-- Decart Realtime SDK Script -->
-  <script type="module">
-    import { createDecartClient, models } from "https://esm.sh/@decartai/sdk@0.2.14";
+    if (unmirrorParam) {
+      webcamVideo.classList.add("unmirrored");
+    }
 
-    // Application state
-    let decartClient = null;
-    let realtimeClient = null;
+    let isHudDisabled = hideHudParam;
     let localStream = null;
     let ws = null;
-    let isCameraInitializing = false;
+    let hudTimeout = null;
 
-    let aiEnabled = true;
-    let currentPrompt = "Cinematic lighting, high detail, masterpiece";
-    let defaultPrompt = currentPrompt;
-    let offMode = "webcam"; // 'webcam' or 'transparent'
-    let isConnectingDecart = false;
+    // -------------------------------------------------------------------------
+    // 1. Webcam Initialization
+    // -------------------------------------------------------------------------
+    async function initCamera() {
+      if (localStream) return true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+            frameRate: { ideal: 60, min: 30 }
+          },
+          audio: false
+        });
+        localStream = stream;
+        webcamVideo.srcObject = stream;
+        await webcamVideo.play();
+        startModal.classList.remove("active");
+        console.log("Webcam started successfully.");
+        return true;
+      } catch (err) {
+        console.warn("High-res camera failed, falling back to standard resolution:", err);
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          localStream = fallbackStream;
+          webcamVideo.srcObject = fallbackStream;
+          await webcamVideo.play();
+          startModal.classList.remove("active");
+          return true;
+        } catch (fallbackErr) {
+          console.error("Camera access denied or unavailable:", fallbackErr);
+          startModal.classList.add("active");
+          return false;
+        }
+      }
+    }
 
-    // Elements
-    const localVideo = document.getElementById("local-video");
-    const remoteVideo = document.getElementById("remote-video");
-    const hud = document.getElementById("hud");
-    const statusBadge = document.getElementById("status-badge");
-    const statusLabel = document.getElementById("status-label");
-    const promptBanner = document.getElementById("prompt-banner");
-    const promptText = document.getElementById("prompt-text");
-    const promptSource = document.getElementById("prompt-source");
-    const promptUser = document.getElementById("prompt-user");
-    const timerContainer = document.getElementById("timer-container");
-    const timerText = document.getElementById("timer-text");
-    const timerBarFill = document.getElementById("timer-bar-fill");
-    const permissionModal = document.getElementById("permission-modal");
-    const startStreamBtn = document.getElementById("start-stream-btn");
-    const toast = document.getElementById("toast");
-    const clipVideo = document.getElementById("clip-video");
+    startModal.addEventListener("click", () => {
+      initCamera();
+    });
 
-    function playClip(url, name) {
+    // -------------------------------------------------------------------------
+    // 2. Seamless Viral Clip Playback
+    // -------------------------------------------------------------------------
+    function playClip(url, title, user, detail) {
       if (!clipVideo) return;
+      console.log("Playing clip:", url, title);
       clipVideo.src = url;
       clipVideo.currentTime = 0;
-      clipVideo.style.opacity = "1";
-      clipVideo.play().catch(e => console.warn("Clip play:", e));
+      clipVideo.classList.add("active");
 
-      clipVideo.onended = () => {
-        clipVideo.style.opacity = "0";
-        setTimeout(() => { clipVideo.src = ""; }, 300);
-      };
+      clipVideo.play().catch(e => {
+        console.warn("Auto-play error (click stream to allow audio):", e);
+        // Retry muted if audio policy blocked it
+        clipVideo.muted = true;
+        clipVideo.play();
+      });
+
+      if (!isHudDisabled) {
+        let label = title || "Viral VFX";
+        if (user) label += ` • ${user}`;
+        if (detail) label += ` (${detail})`;
+        hudTitle.textContent = label;
+        hudBanner.classList.add("visible");
+
+        if (hudTimeout) clearTimeout(hudTimeout);
+        hudTimeout = setTimeout(() => {
+          hudBanner.classList.remove("visible");
+        }, 5000);
+      }
     }
 
-    // Parse URL query parameters
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("hud") === "0" || params.get("hud") === "false") {
-      hud.classList.add("hidden");
-    }
-    if (params.get("mode")) {
-      offMode = params.get("mode").toLowerCase();
-    }
-    document.body.className = `mode-${offMode}`;
-
-    const isMirrored = params.get("mirror") !== "0";
-    if (isMirrored) {
-      localVideo.classList.add("mirrored");
-      remoteVideo.classList.add("mirrored");
+    function stopClip() {
+      if (!clipVideo) return;
+      clipVideo.classList.remove("active");
+      hudBanner.classList.remove("visible");
+      setTimeout(() => {
+        clipVideo.pause();
+        clipVideo.src = "";
+      }, 300);
     }
 
-    // Toggle HUD with key 'h'
+    clipVideo.onended = () => {
+      console.log("Clip finished naturally. Returning to webcam.");
+      stopClip();
+    };
+
+    // -------------------------------------------------------------------------
+    // 3. Hotkeys (H to toggle HUD, Space / Escape to stop clip)
+    // -------------------------------------------------------------------------
     window.addEventListener("keydown", (e) => {
       if (e.key === "h" || e.key === "H") {
-        hud.classList.toggle("hidden");
+        isHudDisabled = !isHudDisabled;
+        if (isHudDisabled) hudBanner.classList.remove("visible");
+      }
+      if (e.key === "Escape" || e.key === " ") {
+        stopClip();
       }
     });
 
-    function showToast(message, duration = 4000) {
-      toast.textContent = message;
-      toast.classList.add("show");
-      setTimeout(() => {
-        toast.classList.remove("show");
-      }, duration);
-    }
-
-    function updateStatus(stateClass, label) {
-      statusBadge.className = `status-badge ${stateClass}`;
-      statusLabel.textContent = label;
-    }
-
-    function highlightPromptBanner() {
-      promptBanner.classList.add("highlight");
-      setTimeout(() => promptBanner.classList.remove("highlight"), 1000);
-    }
-
-    // =========================================================================
-    // Camera Stream Capture
-    // =========================================================================
-    async function initCamera() {
-      if (localStream) return true;
-      if (isCameraInitializing) return false;
-      isCameraInitializing = true;
-
-      try {
-        const model = models.realtime("lucy-latest");
-        const videoConstraints = {
-          width: typeof model.width === "number" ? { ideal: model.width } : (model.width || { ideal: 1280 }),
-          height: typeof model.height === "number" ? { ideal: model.height } : (model.height || { ideal: 720 }),
-          frameRate: typeof model.fps === "number" ? { ideal: model.fps } : (model.fps || { ideal: 30, max: 30 })
-        };
-
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({
-            video: videoConstraints,
-            audio: true
-          });
-        } catch (audioErr) {
-          console.warn("Audio unavailable or constraint issue, trying video only:", audioErr);
-          try {
-            localStream = await navigator.mediaDevices.getUserMedia({
-              video: videoConstraints,
-              audio: false
-            });
-          } catch (resErr) {
-            console.warn("Specific constraints failed, trying basic video:", resErr);
-            localStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false
-            });
-          }
-        }
-
-        localVideo.srcObject = localStream;
-        try {
-          await localVideo.play();
-        } catch (e) {
-          console.log("Local video play notice:", e);
-        }
-        permissionModal.classList.add("hidden");
-        updateDisplay();
-        return true;
-      } catch (err) {
-        console.error("Camera access error:", err);
-        showToast("Camera error: " + err.message);
-        updateStatus("ai-error", "Camera Error");
-        return false;
-      } finally {
-        isCameraInitializing = false;
-      }
-    }
-
-    // =========================================================================
-    // Decart Realtime Client Connection
-    // =========================================================================
-    function getDecartClient() {
-      if (!decartClient) {
-        decartClient = createDecartClient({
-          apiKeyProvider: async () => {
-            const res = await fetch("/api/token", { method: "POST" });
-            const data = await res.json();
-            if (!res.ok || !data.apiKey) {
-              const err = data.error || "Decart API key missing or token failed";
-              throw new Error(err);
-            }
-            return data.apiKey;
-          }
-        });
-      }
-      return decartClient;
-    }
-
-    async function startRealtimeSession() {
-      if (realtimeClient || isConnectingDecart) return;
-      if (!localStream) {
-        const ok = await initCamera();
-        if (!ok) return;
-      }
-
-      isConnectingDecart = true;
-      updateStatus("ai-standby", "Connecting Decart...");
-
-      try {
-        const client = getDecartClient();
-        const model = models.realtime("lucy-latest");
-
-        loggerLog("Connecting to Decart Realtime (lucy-latest)...");
-
-        realtimeClient = await client.realtime.connect(localStream, {
-          model,
-          mirror: isMirrored ? "auto" : false,
-          initialState: {
-            prompt: { text: currentPrompt }
-          },
-          onRemoteStream: (stream) => {
-            loggerLog("Decart remote stream received!");
-            remoteVideo.srcObject = stream;
-            remoteVideo.play().catch(e => console.warn("Remote video play:", e));
-            updateDisplay();
-            updateStatus("ai-active", "AI STREAM ACTIVE");
-            showToast("✨ Decart AI Stream Connected");
-          }
-        });
-
-        realtimeClient.on("sessionEnded", ({ reason }) => {
-          loggerLog("Decart session ended: " + reason);
-          stopRealtimeSession();
-          showToast(`Decart session ended: ${reason}`);
-        });
-
-        // Set prompt in case it updated while connecting
-        if (realtimeClient && typeof realtimeClient.setPrompt === "function") {
-          realtimeClient.setPrompt(currentPrompt);
-        }
-
-      } catch (err) {
-        console.error("Decart connection failed:", err);
-        showToast("Decart AI: " + err.message);
-        updateStatus("ai-error", "Decart Error");
-        stopRealtimeSession();
-      } finally {
-        isConnectingDecart = false;
-        updateDisplay();
-      }
-    }
-
-    function stopRealtimeSession() {
-      if (realtimeClient) {
-        try {
-          loggerLog("Disconnecting Decart WebRTC session...");
-          if (typeof realtimeClient.disconnect === "function") {
-            realtimeClient.disconnect();
-          }
-        } catch (e) {
-          console.error("Error during Decart disconnect:", e);
-        }
-        realtimeClient = null;
-      }
-
-      if (remoteVideo.srcObject) {
-        remoteVideo.srcObject = null;
-      }
-
-      updateDisplay();
-      if (!aiEnabled) {
-        updateStatus("ai-standby", offMode === "transparent" ? "AI OFF (Transparent)" : "AI OFF (Webcam)");
-      }
-    }
-
-    function updateDisplay() {
-      if (aiEnabled && realtimeClient && remoteVideo.srcObject) {
-        // Show remote transformed stream
-        remoteVideo.style.opacity = "1";
-        localVideo.style.opacity = "0";
-      } else {
-        // AI is OFF or waiting
-        remoteVideo.style.opacity = "0";
-        if (offMode === "webcam") {
-          localVideo.style.opacity = "1";
-        } else {
-          // Transparent screen mode for OBS chroma/alpha keying
-          localVideo.style.opacity = "0";
-        }
-      }
-    }
-
-    function loggerLog(msg) {
-      console.log(`[Overlay] ${msg}`);
-    }
-
-    // =========================================================================
-    // WebSocket Connection
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // 4. WebSocket Hub Connection
+    // -------------------------------------------------------------------------
     function connectWebSocket() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/ws?client=overlay`;
-
-      loggerLog("Connecting to WebSocket: " + wsUrl);
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        loggerLog("Connected to controller WebSocket");
-        showToast("Connected to Controller");
+        console.log("Connected to Stream Controller WebSocket.");
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          handleWebSocketMessage(data);
-        } catch (err) {
-          console.error("WS message parse error:", err);
+          switch (data.type) {
+            case "status_sync":
+              if (data.feed_enabled !== undefined) {
+                setFeedState(data.feed_enabled);
+              }
+              break;
+            case "feed_status":
+              setFeedState(data.enabled);
+              break;
+            case "play_clip":
+              playClip(data.url, data.name || data.clip, data.user, data.detail);
+              break;
+            case "stop_clip":
+              stopClip();
+              break;
+          }
+        } catch (e) {
+          console.error("WebSocket message parse error:", e);
         }
       };
 
       ws.onclose = () => {
-        loggerLog("WebSocket closed. Reconnecting in 2s...");
         setTimeout(connectWebSocket, 2000);
       };
-
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-      };
     }
 
-    function handleWebSocketMessage(data) {
-      switch (data.type) {
-        case "status_sync":
-          aiEnabled = data.ai_enabled;
-          currentPrompt = data.current_prompt;
-          defaultPrompt = data.default_prompt;
-          updatePromptHUD(data.current_prompt, data.source, data.user);
-          handleTimerTick(data.timer_seconds_left, data.timer_duration);
-          syncAIStreamState();
-          break;
-
-        case "set_prompt":
-          currentPrompt = data.prompt;
-          updatePromptHUD(data.prompt, data.source, data.user);
-          highlightPromptBanner();
-          if (realtimeClient && typeof realtimeClient.setPrompt === "function") {
-            loggerLog("Calling realtimeClient.setPrompt: " + currentPrompt);
-            realtimeClient.setPrompt(currentPrompt);
-          }
-          break;
-
-        case "toggle_ai":
-          aiEnabled = data.enabled;
-          syncAIStreamState();
-          break;
-
-        case "timer_tick":
-          handleTimerTick(data.seconds_left, data.duration);
-          break;
-
-        case "play_clip":
-          if (data.url) {
-            playClip(data.url, data.clip);
-            showToast(`🎬 Playing Clip: ${data.clip || "Viral VFX"}`);
-          }
-          break;
-
-        case "config_updated":
-          if (data.config && data.config.default_off_mode) {
-            offMode = data.config.default_off_mode;
-            document.body.className = `mode-${offMode}`;
-            updateDisplay();
-          }
-          break;
-      }
-    }
-
-    function syncAIStreamState() {
-      if (aiEnabled) {
-        if (!realtimeClient && !isConnectingDecart) {
-          startRealtimeSession();
-        }
+    function setFeedState(enabled) {
+      const offlineScreen = document.getElementById("offline-screen");
+      if (!enabled) {
+        if (offlineScreen) offlineScreen.style.display = "flex";
+        stopClip();
+        if (webcamVideo) webcamVideo.style.opacity = "0";
       } else {
-        if (realtimeClient) {
-          stopRealtimeSession();
-        } else {
-          updateDisplay();
-          updateStatus("ai-standby", offMode === "transparent" ? "AI OFF (Transparent)" : "AI OFF (Webcam)");
-        }
+        if (offlineScreen) offlineScreen.style.display = "none";
+        if (webcamVideo) webcamVideo.style.opacity = "1";
+        if (!localStream) initCamera();
       }
     }
 
-    function updatePromptHUD(prompt, source, user) {
-      promptText.textContent = prompt;
-      let label = "Preset / Manual";
-      if (source === "tiktok_comment") {
-        label = `💬 TikTok Chat: ${user || "Viewer"}`;
-      } else if (source === "tiktok_gift") {
-        label = `🎁 TikTok Gift: ${user || "Viewer"}`;
-      } else if (source === "default" || source === "default_reset") {
-        label = "Default Stream Effect";
-      }
-      promptSource.textContent = label;
-      promptUser.textContent = user ? user : "";
-    }
-
-    function handleTimerTick(secondsLeft, totalDuration) {
-      if (secondsLeft > 0 && totalDuration > 0) {
-        timerContainer.classList.add("active");
-        timerText.textContent = `${secondsLeft}s`;
-        const percentage = Math.max(0, Math.min(100, (secondsLeft / totalDuration) * 100));
-        timerBarFill.style.width = `${percentage}%`;
-      } else {
-        timerContainer.classList.remove("active");
-        timerBarFill.style.width = "0%";
-      }
-    }
-
-    // User Gesture Handler
-    startStreamBtn.addEventListener("click", async () => {
-      permissionModal.classList.add("hidden");
-      const ok = await initCamera();
-      if (ok && aiEnabled) {
-        startRealtimeSession();
-      }
-    });
-
-    // Auto-init on load if autoplay allowed
-    window.addEventListener("DOMContentLoaded", async () => {
+    // Startup
+    window.addEventListener("DOMContentLoaded", () => {
+      initCamera();
       connectWebSocket();
-      // Attempt camera init automatically (OBS browser source typically allows this)
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        stream.getTracks().forEach(t => t.stop());
-        // Permitted!
-        await initCamera();
-        if (aiEnabled) {
-          startRealtimeSession();
-        }
-      } catch (e) {
-        console.log("Auto-start camera needs user gesture, showing start button.");
-      }
     });
   </script>
 </body>
